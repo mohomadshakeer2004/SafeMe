@@ -1,0 +1,18 @@
+import org.gradle.api.JavaVersion
+
+// Old Flutter plugins (e.g. assets_audio_player_web) ship compileSdk 28 and Java 8.
+// Setting compileOptions on the android extension is what fixes compileDebugJavaWithJavac vs Kotlin 17.
+subprojects { subproject ->
+    subproject.afterEvaluate {
+        if (!subproject.plugins.hasPlugin("com.android.library") && !subproject.plugins.hasPlugin("com.android.application")) {
+            return
+        }
+        subproject.android {
+            compileSdkVersion 36
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+        }
+    }
+}
