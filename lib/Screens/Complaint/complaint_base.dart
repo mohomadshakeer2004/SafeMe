@@ -38,25 +38,46 @@ class _ComplaintHomeState extends State<ComplaintHome> {
   getComplaintData() async {
     final nic = await UserService().requireLoggedInNic();
     if (nic == null) return;
+
     EasyLoading.show(status: "Getting Complaint Data");
-    final databaseRef = FirebaseService.instance.rootRef;
+    try {
+      final databaseRef = FirebaseService.instance.rootRef;
+      final event = await databaseRef.child('/Complaints/All').once();
 
-    var get_UserData = databaseRef.child('/Complaints/All');
-    DatabaseEvent event = await get_UserData.once();
+      if (event.snapshot.value == null) {
+        if (mounted) {
+          setState(() {
+            complaintData = {};
+          });
+        }
+        return;
+      }
 
-    Map<String, dynamic> data =
-        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
-    setState(() {
-      complaintData = data;
-    });
+      final data = jsonDecode(jsonEncode(event.snapshot.value))
+          as Map<String, dynamic>;
 
-    print(
-        "************ User Data = ${complaintData.values.toList()}**************");
+      if (!mounted) return;
+      setState(() {
+        complaintData = data;
+      });
+
+      print(
+          "************ User Data = ${complaintData.values.toList()}**************");
+    } catch (e) {
+      debugPrint('Failed to load complaints: $e');
+      if (mounted) {
+        setState(() {
+          complaintData = {};
+        });
+      }
+    } finally {
+      EasyLoading.dismiss();
+    }
   }
 
   void _onRefresh() async {
     print("REFRESH STARTED");
-    getComplaintData();
+    await getComplaintData();
     _refreshController.refreshCompleted();
     print("REFRESH STOPPED");
   }

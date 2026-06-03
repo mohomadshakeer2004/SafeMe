@@ -55,40 +55,28 @@ class _HomeBaseState extends State<HomeBase> {
       SystemUiMode.manual,
       overlays: [],
     );
-    return FlutterEasyLoading(
-      key: Key("HomeBase"),
-      child: SafeArea(
-        child: Scaffold(
-          body: _pageOptions[selectedpage],
-          backgroundColor: mainBGColor,
-          bottomNavigationBar: BottomNavigationBar(
-             // type: BottomNavigationBarType.fixed,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(FontAwesomeIcons.bars),
-                label: '',
+    return SafeArea(
+      child: Scaffold(
+        body: _pageOptions[selectedpage],
+        backgroundColor: mainBGColor,
+        bottomNavigationBar: BottomNavigationBar(
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(FontAwesomeIcons.bars),
+              label: '',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(
+                FontAwesomeIcons.user,
               ),
-              // BottomNavigationBarItem(
-              //   icon: Icon(FontAwesomeIcons.history),
-              //   label: '',
-              // ),
-              // BottomNavigationBarItem(
-              //   icon: Icon(FontAwesomeIcons.bell),
-              //   label: '',
-              // ),
-               BottomNavigationBarItem(
-                icon: Icon(
-                  FontAwesomeIcons.user,
-                ),
-                label: '',
-              ),
-            ],
-            currentIndex: selectedpage,
-            selectedItemColor: secondary,
-            unselectedItemColor: IconColor2,
-            iconSize: 20,
-            onTap: _onItemTapped,
-          ),
+              label: '',
+            ),
+          ],
+          currentIndex: selectedpage,
+          selectedItemColor: secondary,
+          unselectedItemColor: IconColor2,
+          iconSize: 20,
+          onTap: _onItemTapped,
         ),
       ),
     );

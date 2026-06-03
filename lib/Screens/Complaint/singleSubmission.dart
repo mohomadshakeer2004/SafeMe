@@ -6,6 +6,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:safe_me/service/firebase_service.dart';
 import 'package:safe_me/service/userService.dart';
+import 'package:safe_me/util/user_data_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
@@ -68,38 +69,67 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
 
   getComplaintData() async {
     EasyLoading.show(status: "Getting Complaint Data");
-    final databaseRef = FirebaseService.instance.rootRef;
+    try {
+      final databaseRef = FirebaseService.instance.rootRef;
 
-    var get_UserData = databaseRef.child('/Complaints/All').child(widget.CID);
-    DatabaseEvent event = await get_UserData.once();
+      var get_UserData =
+          databaseRef.child('/Complaints/All').child(widget.CID);
+      DatabaseEvent event = await get_UserData.once();
 
-    Map<String, dynamic> data =
-        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
-    setState(() {
-      complaintData = data;
-    });
+      if (event.snapshot.value == null) {
+        if (mounted) {
+          setState(() {
+            complaintData = {};
+          });
+        }
+        return;
+      }
 
-    print(
-        "************complaint Data= ${complaintData.values.toList()}**************");
+      Map<String, dynamic> data =
+          jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        complaintData = data;
+      });
+
+      print(
+          "************complaint Data= ${complaintData.values.toList()}**************");
+    } catch (e) {
+      debugPrint('Failed to load complaint: $e');
+    } finally {
+      EasyLoading.dismiss();
+    }
   }
 
   getUserData() async {
     final nic = await UserService().requireLoggedInNic();
     if (nic == null) return;
     EasyLoading.show(status: "Getting User Data");
-    final databaseRef = FirebaseService.instance.rootRef;
+    try {
+      final databaseRef = FirebaseService.instance.rootRef;
 
-    var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
-    DatabaseEvent event = await get_UserData.once();
-    String aa = (event.snapshot.value).toString();
-    // EasyLoading.dismiss();
-    Map<String, dynamic> data =
-        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
-    setState(() {
-      userData = data;
-    });
+      var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
+      DatabaseEvent event = await get_UserData.once();
 
-    print("************ User Data = ${data}**************");
+      if (event.snapshot.value == null) {
+        return;
+      }
+
+      Map<String, dynamic> data = UserDataUtil.withDefaults(
+        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>,
+        nic,
+      );
+      if (!mounted) return;
+      setState(() {
+        userData = data;
+      });
+
+      print("************ User Data = ${data}**************");
+    } catch (e) {
+      debugPrint('Failed to load user data: $e');
+    } finally {
+      EasyLoading.dismiss();
+    }
   }
 
   @override
@@ -730,18 +760,18 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
   Future<void> _CreatePDF() async {
     print("Save PDF");
     final pdfFile = await PdfApi.generateImage(
-        userData['Address'],
+        UserDataUtil.field(userData, 'Address'),
         complaintData['CID'],
         complaintData['City'],
         complaintData['Date'],
         complaintData['Description'],
         complaintData['District'],
-        userData['Email'],
+        UserDataUtil.field(userData, 'Email'),
         complaintData['Latitude'],
         complaintData['Longitude'],
-        userData['Mobile'],
-        userData['NIC'],
-        userData['Name'],
+        UserDataUtil.field(userData, 'Mobile'),
+        UserDataUtil.field(userData, 'NIC'),
+        UserDataUtil.field(userData, 'Name'),
         complaintData['Reason'].toString(),
         complaintData['Status'],
         complaintData['Type']);

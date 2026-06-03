@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
@@ -12,7 +11,9 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:safe_me/service/firebase_service.dart';
+import 'package:safe_me/service/storage_service.dart';
 import 'package:safe_me/service/userService.dart';
+import 'package:safe_me/util/user_data_util.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:motion_toast/motion_toast.dart';
 import 'package:motion_toast/resources/arrays.dart';
@@ -126,10 +127,10 @@ class _SafeMeFormState extends State<SafeMeForm> {
     'Crime against women & children'
   ];
 
-  late String selectDistrict;
-  late String selectCity;
-  late String selectType;
-  late DateTime selectDate;
+  String selectDistrict = '';
+  String selectCity = '';
+  String selectType = '';
+  DateTime selectDate = DateTime.now();
 
   getCurrLocation() async {
     EasyLoading.show(status: "Getting Your Location");
@@ -154,9 +155,16 @@ class _SafeMeFormState extends State<SafeMeForm> {
 
     var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
     DatabaseEvent event = await get_UserData.once();
-    String aa = (event.snapshot.value).toString();
-    Map<String, dynamic> data =
-        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
+
+    if (event.snapshot.value == null) {
+      EasyLoading.dismiss();
+      return;
+    }
+
+    Map<String, dynamic> data = UserDataUtil.withDefaults(
+      jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>,
+      nic,
+    );
     setState(() {
       userData = data;
     });
@@ -167,17 +175,18 @@ class _SafeMeFormState extends State<SafeMeForm> {
   }
 
   Future initRecorder() async {
-    final status = await Permission.microphone.request();
+    try {
+      final status = await Permission.microphone.request();
+      if (status != PermissionStatus.granted) return;
 
-    if (status != PermissionStatus.granted) {
-      throw 'Microphone permission not granted';
+      await recorder.openRecorder();
+      isRecorderReady = true;
+      recorder.setSubscriptionDuration(
+        const Duration(milliseconds: 500),
+      );
+    } catch (e) {
+      debugPrint('Recorder init failed: $e');
     }
-    // await recorder.openRecorder();
-    isRecorderReady = true;
-
-    recorder.setSubscriptionDuration(
-      const Duration(milliseconds: 500),
-    );
   }
 
   @override
@@ -190,7 +199,9 @@ class _SafeMeFormState extends State<SafeMeForm> {
 
   @override
   void dispose() {
-    // recorder.closeRecorder();
+    if (isRecorderReady) {
+      recorder.closeRecorder();
+    }
     super.dispose();
   }
 
@@ -505,41 +516,48 @@ class _SafeMeFormState extends State<SafeMeForm> {
                     children: [
                       InkWell(
                           onTap: () async {
-                            EasyLoading.show(status: "Submitting...");
                             try {
-                              if (_fbKey.currentState!.validate() &&
+                              if (_fbKey.currentState!.saveAndValidate() &&
                                   _file1 != null &&
                                   _file2 != null) {
+                                final formData = _fbKey.currentState!.value;
+                                final district =
+                                    formData['district'] as String? ?? '';
+                                final city =
+                                    formData['city'] as String? ?? '';
+
+                                EasyLoading.show(status: "Submitting...");
                                 print("******Validate******");
                                 var result = await submitSafeMe(
-                                    userData['Address'],
+                                    UserDataUtil.field(userData, 'Address'),
                                     "",
-                                    //AudioMP3
-                                    selectCity,
+                                    city,
                                     DateTime.now(),
-                                    selectDistrict,
-                                    userData['Email'],
-                                    _file1 as File,
-                                    _file2 as File,
-                                    _file3 as File,
-                                    _file4 as File,
-                                    _file5 as File,
+                                    district,
+                                    UserDataUtil.field(userData, 'Email'),
+                                    _file1!,
+                                    _file2!,
+                                    _file3,
+                                    _file4,
+                                    _file5,
                                     _position.latitude,
                                     _position.longitude,
-                                    int.parse(userData['Mobile']),
-                                    userData['NIC'],
-                                    userData['Name'],
-                                    userData['ProfileImage']);
+                                    UserDataUtil.mobileAsInt(userData),
+                                    UserDataUtil.field(userData, 'NIC'),
+                                    UserDataUtil.field(userData, 'Name'),
+                                    UserDataUtil.field(userData, 'ProfileImage'));
 
-                                if (result = true) {
-                                  EasyLoading.dismiss();
+                                EasyLoading.dismiss();
+                                if (result == true) {
                                   EasyLoading.showSuccess(
                                       'SafeMe Submitted successfully!');
 
                                   Future.delayed(Duration(milliseconds: 3500),
                                       () async {
+                                    EasyLoading.dismiss();
                                     print(
                                         "******SafeMe Submitted successfully!******");
+                                    if (!context.mounted) return;
                                     Navigator.pop(context);
                                     Navigator.pushAndRemoveUntil(
                                         context,
@@ -564,9 +582,9 @@ class _SafeMeFormState extends State<SafeMeForm> {
                               }
                             } catch (e) {
                               print(e);
-
+                              EasyLoading.dismiss();
                               print("******Not Validate******");
-                            } finally {}
+                            }
                           },
                           child: Container(
                             height: 50,
@@ -705,7 +723,7 @@ class _SafeMeFormState extends State<SafeMeForm> {
     );
   }
 
-  Future<bool?> submitSafeMe(
+  Future<bool> submitSafeMe(
     String Address,
     String AudioMP3,
     String City,
@@ -714,9 +732,9 @@ class _SafeMeFormState extends State<SafeMeForm> {
     String Email,
     File Image1,
     File Image2,
-    File Image3,
-    File Image4,
-    File Image5,
+    File? Image3,
+    File? Image4,
+    File? Image5,
     double Latitude,
     double Longitude,
     int Mobile,
@@ -725,103 +743,78 @@ class _SafeMeFormState extends State<SafeMeForm> {
     String ProfileImage,
   ) async {
     final databaseRef = FirebaseService.instance.rootRef;
-    FirebaseStorage storage = FirebaseStorage.instance;
-    EasyLoading.show(status: "Submitting...");
 
-    ///Get Last safeme ID -1st Step
+    try {
+      final sidEvent = await databaseRef.child("/SafeMe/LastSID").once();
+      var sid = int.tryParse('${sidEvent.snapshot.value}') ?? 0;
+      sid++;
 
-    var get_SID = databaseRef.child("/SafeMe/LastSID");
-    DatabaseEvent event = await get_SID.once();
-    int SID = (event.snapshot.value).hashCode + 1;
-    print("************ Complaint ID = $SID**************");
+      print("************ SafeMe ID = $sid**************");
 
-    if (SID != null) {
-      try {
-        print("************Get Complaint ID = $SID");
-        var data = {
-          "SID": SID,
-          "Address": Address,
-          "AudioMP3": "",
-          "City": City,
-          "Date": Date.toString(),
-          "District": District,
-          "Email": Email,
-          "Image1": "",
-          "Image2": "",
-          "Image3": "",
-          "Image4": "",
-          "Image5": "",
-          "Latitude": Longitude,
-          "Longitude": Latitude,
-          "Mobile": Mobile,
-          "NIC": NIC,
-          "Name": Name,
-          "ProfileImage": ProfileImage,
-          "Severity": "Medium",
-          "Status": "Alert Sent"
-        };
+      final data = {
+        "SID": sid,
+        "Address": Address,
+        "AudioMP3": "",
+        "City": City,
+        "Date": Date.toString(),
+        "District": District,
+        "Email": Email,
+        "Image1": "",
+        "Image2": "",
+        "Image3": "",
+        "Image4": "",
+        "Image5": "",
+        "Latitude": Latitude,
+        "Longitude": Longitude,
+        "Mobile": Mobile,
+        "NIC": NIC,
+        "Name": Name,
+        "ProfileImage": ProfileImage,
+        "Severity": "Medium",
+        "Status": "Alert Sent",
+      };
 
-        ///Save SafeMe - 2nd Step
+      await databaseRef.child("/SafeMe/All/$sid").set(data);
+      print("**************Save SafeMe response ");
 
-        databaseRef.child("/SafeMe/All/").child("$SID").set(data);
-        print("**************Save SafeMe response ");
+      final imageUpdates = <String, dynamic>{};
+      final uploads = <Future<void>>[];
 
-        /// update SafeMe image Url
-
-        Reference ref_Im1 =
-            storage.ref().child("/safeme images/" + "$SID" "_1");
-        await ref_Im1.putFile(Image1);
-        Reference ref_Im2 =
-            storage.ref().child("/safeme images/" + "$SID" "_2");
-        await ref_Im2.putFile(Image2);
-        Reference ref_Im3 =
-            storage.ref().child("/safeme images/" + "$SID" "_3");
-        await ref_Im3.putFile(Image3);
-        Reference ref_Im4 =
-            storage.ref().child("/safeme images/" + "$SID" "_4");
-        await ref_Im4.putFile(Image4);
-        Reference ref_Im5 =
-            storage.ref().child("/safeme images/" + "$SID" "_5");
-        await ref_Im5.putFile(Image5);
-
-        String image1Url = await ref_Im1.getDownloadURL();
-        String image2Url = await ref_Im2.getDownloadURL();
-        String image3Url = await ref_Im3.getDownloadURL();
-        String image4Url = await ref_Im4.getDownloadURL();
-        String image5Url = await ref_Im5.getDownloadURL();
-        print("********Image_1 URL = $image1Url");
-        print("********Image_2 URL = $image2Url");
-
-        databaseRef.child("/SafeMe/All/$SID").update({
-          'Image1': image1Url,
-          'Image2': image2Url,
-          'Image3': image3Url,
-          'Image4': image4Url,
-          'Image5': image5Url
-        });
-
-        ///Update Last SafeMe ID
-        databaseRef.child("/SafeMe/").update({'LastSID': SID});
-
-        ///Update SafeMe Count
-        var getSafeMeCount = databaseRef.child("/SafeMe/PendingCount");
-        DatabaseEvent event = await getSafeMeCount.once();
-        print(event.snapshot.value);
-        int SafeMe_PCount = (event.snapshot.value).hashCode + 1;
-        databaseRef.child("/SafeMe/").update({'PendingCount': SafeMe_PCount});
-
-        ///Update SafeMe Total Count
-        var getSafeMeTotalCount = databaseRef.child("/SafeMe/TotalCount");
-        DatabaseEvent eventT = await getSafeMeTotalCount.once();
-        print(eventT.snapshot.value);
-        int SafeMe_ToCount = (eventT.snapshot.value).hashCode + 1;
-        databaseRef.child("/SafeMe/").update({'TotalCount': SafeMe_ToCount});
-
-        return true;
-      } catch (e) {
-        print(e);
-        return false;
+      Future<void> uploadOptional(int index, File? file) async {
+        if (file == null) return;
+        final url = await StorageService.uploadFile(
+          storagePath: "safeme images/${sid}_$index",
+          file: file,
+        );
+        if (url != null) imageUpdates['Image$index'] = url;
       }
+
+      uploads.add(uploadOptional(1, Image1));
+      uploads.add(uploadOptional(2, Image2));
+      uploads.add(uploadOptional(3, Image3));
+      uploads.add(uploadOptional(4, Image4));
+      uploads.add(uploadOptional(5, Image5));
+      await Future.wait(uploads);
+
+      if (imageUpdates.isNotEmpty) {
+        await databaseRef.child("/SafeMe/All/$sid").update(imageUpdates);
+      }
+
+      await databaseRef.child("/SafeMe/LastSID").set(sid);
+
+      final pendingEvent =
+          await databaseRef.child("/SafeMe/PendingCount").once();
+      final pending = int.tryParse('${pendingEvent.snapshot.value}') ?? 0;
+      await databaseRef.child("/SafeMe/PendingCount").set(pending + 1);
+
+      final totalEvent = await databaseRef.child("/SafeMe/TotalCount").once();
+      final total = int.tryParse('${totalEvent.snapshot.value}') ?? 0;
+      await databaseRef.child("/SafeMe/TotalCount").set(total + 1);
+
+      return true;
+    } catch (e) {
+      print(e);
+      return false;
     }
   }
 }

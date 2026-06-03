@@ -77,16 +77,33 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   getCurrLocation() async {
-    // EasyLoading.show(status: "Getting Your Location");
-    Position positionCur = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
-    print("///////////////////////$positionCur//////////////////////////");
-    EasyLoading.dismiss();
-    setState(() {
-      _position = positionCur;
-      _txtLocation.text =
-          "${positionCur.latitude.toStringAsFixed(7)} , ${positionCur.longitude.toStringAsFixed(7)}";
-    });
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      final positionCur = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      if (!mounted) return;
+      setState(() {
+        _position = positionCur;
+        _txtLocation.text =
+            "${positionCur.latitude.toStringAsFixed(7)} , ${positionCur.longitude.toStringAsFixed(7)}";
+      });
+    } catch (e) {
+      debugPrint('Location unavailable: $e');
+    } finally {
+      EasyLoading.dismiss();
+    }
   }
 
   @override

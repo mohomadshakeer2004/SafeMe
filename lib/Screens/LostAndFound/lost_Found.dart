@@ -19,6 +19,7 @@ import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
 import '../../widgets/drawer.dart';
+import '../../widgets/safe_date_field.dart';
 import '../home_base.dart';
 
 class LostFoundItem extends StatefulWidget {
@@ -229,33 +230,20 @@ class _LostFoundItemState extends State<LostFoundItem> {
                         .toList(),
                   ),
                   SizedBox(height: 15),
-                  FormBuilderDateTimePicker(
+                  SafeDateField(
                     name: 'dateTime',
+                    labelText: "DateTime".tr(),
+                    labelStyle: hintTextStyle,
+                    focusColor: secondary,
+                    includeTime: true,
+                    lastDate: DateTime.now(),
+                    firstDate: DateTime.now().subtract(const Duration(days: 5)),
                     onChanged: (val) => setState(() {
-                      selectDate = val!;
+                      if (val != null) selectDate = val;
                     }),
-                    inputType: InputType.both,
                     validator: (value) => value == null
                         ? "Enter Lost or Found Date & Time"
                         : null,
-                    decoration: InputDecoration(
-                      suffixIcon: Icon(Icons.date_range),
-                      labelText: "DateTime".tr(),
-                      labelStyle: hintTextStyle,
-                      contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                      border: OutlineInputBorder(),
-                      focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: secondary)),
-                    ),
-
-                    // initialTime: const TimeOfDay(hour: 12, minute: 0),
-                    // initialValue: DateTime.now(),
-                    lastDate: DateTime.now(),
-                    firstDate: DateTime.now().add(Duration(days: -5)),
-
-                    timePickerInitialEntryMode: TimePickerEntryMode.input,
-
-                    // enabled: true,
                   ),
                   SizedBox(height: 15),
                   FormBuilderTextField(

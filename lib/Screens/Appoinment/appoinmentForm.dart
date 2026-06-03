@@ -14,6 +14,7 @@ import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
 import '../../widgets/drawer.dart';
+import '../../widgets/safe_date_field.dart';
 import '../home_base.dart';
 import 'appointment_base.dart';
 
@@ -169,32 +170,18 @@ class _AppointmentFormState extends State<AppointmentForm> {
                         .toList(),
                   ),
                   SizedBox(height: 15),
-                  FormBuilderDateTimePicker(
+                  SafeDateField(
                     name: 'requestDateTime',
+                    labelText: "RequestDateTime".tr(),
+                    labelStyle: hintTextStyle,
+                    focusColor: secondary,
+                    includeTime: true,
+                    firstDate: DateTime.now(),
                     onChanged: (val) => setState(() {
-                      selectDate = val!;
+                      if (val != null) selectDate = val;
                     }),
                     validator: (value) =>
                         value == null ? "Enter Required Date & Time" : null,
-                    inputType: InputType.both,
-                    decoration: InputDecoration(
-                      suffixIcon: Icon(Icons.date_range),
-                      labelText: "RequestDateTime".tr(),
-                      labelStyle: hintTextStyle,
-                      contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                      border: OutlineInputBorder(),
-                      focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: secondary)),
-                    ),
-
-                    // initialTime: const TimeOfDay(hour: 12, minute: 0),
-                    // initialValue: DateTime.now(),
-
-                    firstDate: DateTime.now(),
-
-                    timePickerInitialEntryMode: TimePickerEntryMode.input,
-
-                    // enabled: true,
                   ),
                   SizedBox(height: 15),
                   FormBuilderDropdown(

@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:safe_me/service/firebase_service.dart';
+import 'package:safe_me/service/storage_service.dart';
 import 'package:safe_me/service/userService.dart';
+import 'package:safe_me/util/user_data_util.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -22,6 +23,7 @@ import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
 import '../../widgets/drawer.dart';
+import '../../widgets/safe_date_field.dart';
 import '../../widgets/forgotPasswordAlertContent.dart';
 import '../../widgets/visible_dialogbutton.dart';
 import '../home_base.dart';
@@ -107,22 +109,42 @@ class _ComplaintFormState extends State<ComplaintForm> {
     'Crime against women & children'
   ];
 
-  late String selectDistrict;
-  late String selectCity;
-  late String selectType;
-  late DateTime selectDate;
+  String selectDistrict = '';
+  String selectCity = '';
+  String selectType = '';
+  DateTime selectDate = DateTime.now();
 
   getCurrLocation() async {
-    EasyLoading.show(status: "Getting Your Location");
-    Position positionCur = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
-    print("///////////////////////$positionCur//////////////////////////");
-    EasyLoading.dismiss();
-    setState(() {
-      _position = positionCur;
-      _txtLocation.text =
-          "${positionCur.latitude.toStringAsFixed(7)} , ${positionCur.longitude.toStringAsFixed(7)}";
-    });
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      final positionCur = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      if (!mounted) return;
+      setState(() {
+        _position = positionCur;
+        _txtLocation.text =
+            "${positionCur.latitude.toStringAsFixed(7)} , ${positionCur.longitude.toStringAsFixed(7)}";
+      });
+    } catch (e) {
+      debugPrint('Location unavailable: $e');
+    }
+  }
+
+  Future<void> _initScreen() async {
+    await getUserData();
+    await getCurrLocation();
   }
 
   final _txtDescriptionController = TextEditingController();
@@ -131,27 +153,38 @@ class _ComplaintFormState extends State<ComplaintForm> {
     final nic = await UserService().requireLoggedInNic();
     if (nic == null) return;
     EasyLoading.show(status: "Getting User Data");
-    final databaseRef = FirebaseService.instance.rootRef;
+    try {
+      final databaseRef = FirebaseService.instance.rootRef;
 
-    var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
-    DatabaseEvent event = await get_UserData.once();
-    String aa = (event.snapshot.value).toString();
-    // EasyLoading.dismiss();
-    Map<String, dynamic> data =
-        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
-    setState(() {
-      userData = data;
-    });
+      var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
+      DatabaseEvent event = await get_UserData.once();
 
-    print("************ User Data = ${data}**************");
-    print("************  User Email = ${data['Email']}**************");
+      if (event.snapshot.value == null) {
+        return;
+      }
+
+      Map<String, dynamic> data = UserDataUtil.withDefaults(
+        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>,
+        nic,
+      );
+      if (!mounted) return;
+      setState(() {
+        userData = data;
+      });
+
+      print("************ User Data = ${data}**************");
+      print("************  User Email = ${data['Email']}**************");
+    } catch (e) {
+      debugPrint('Failed to load user data: $e');
+    } finally {
+      EasyLoading.dismiss();
+    }
   }
 
   @override
   void initState() {
     super.initState();
-    getUserData();
-    getCurrLocation();
+    _initScreen();
   }
 
   @override
@@ -270,31 +303,19 @@ class _ComplaintFormState extends State<ComplaintForm> {
                         .toList(),
                   ),
                   SizedBox(height: 15),
-                  FormBuilderDateTimePicker(
+                  SafeDateField(
                     name: 'dateTime',
-                    onChanged: (val) => setState(() {
-                      selectDate = val!;
-                    }),
-                    inputType: InputType.both,
-
-                    decoration: InputDecoration(
-                      suffixIcon: Icon(Icons.date_range),
-                      labelText: "DateTime".tr(),
-                      labelStyle: hintTextStyle,
-                      contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                      border: OutlineInputBorder(),
-                      focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: secondary)),
-                    ),
-
-                    // initialTime: const TimeOfDay(hour: 12, minute: 0),
+                    labelText: "DateTime".tr(),
+                    labelStyle: hintTextStyle,
+                    focusColor: secondary,
                     initialValue: DateTime.now(),
                     lastDate: DateTime.now(),
-                    firstDate: DateTime.now().add(Duration(days: -5)),
-
-                    timePickerInitialEntryMode: TimePickerEntryMode.input,
-
-                    // enabled: true,
+                    firstDate: DateTime.now().subtract(const Duration(days: 5)),
+                    onChanged: (val) => setState(() {
+                      if (val != null) selectDate = val;
+                    }),
+                    validator: (value) =>
+                        value == null ? "Select incident date" : null,
                   ),
                   SizedBox(height: 15),
                   FormBuilderDropdown(
@@ -429,39 +450,54 @@ class _ComplaintFormState extends State<ComplaintForm> {
                       InkWell(
                           onTap: () async {
                             try {
-                              if (_fbKey.currentState!.validate() &&
+                              if (_fbKey.currentState!.saveAndValidate() &&
                                   _file1 != null &&
                                   _file2 != null) {
-                                if (isAgree == true) {
+                                final formData = _fbKey.currentState!.value;
+                                final agreed = formData['accept_terms'] == true;
+                                if (agreed) {
+                                  final district =
+                                      formData['district'] as String? ?? '';
+                                  final city =
+                                      formData['city'] as String? ?? '';
+                                  final type =
+                                      formData['type'] as String? ?? '';
+                                  final date = formData['dateTime'] as DateTime? ??
+                                      selectDate;
+                                  final description =
+                                      formData['description'] as String? ??
+                                          _txtDescriptionController.text;
+
                                   EasyLoading.show(status: "Submitting...");
                                   print("******Validate******");
                                   var result = await submitComplaint(
-                                      userData['Address'],
-                                      selectCity,
-                                      selectDate,
-                                      _txtDescriptionController.text,
-                                      selectDistrict,
-                                      userData['Email'],
+                                      UserDataUtil.field(userData, 'Address'),
+                                      city,
+                                      date,
+                                      description,
+                                      district,
+                                      UserDataUtil.field(userData, 'Email'),
                                       _file1 as File,
                                       _file2 as File,
                                       _position.latitude,
                                       _position.longitude,
-                                      int.parse(userData['Mobile']),
-                                      userData['NIC'],
-                                      userData['Name'],
-                                      userData['ProfileImage'],
-                                      selectType);
+                                      UserDataUtil.mobileAsInt(userData),
+                                      UserDataUtil.field(userData, 'NIC'),
+                                      UserDataUtil.field(userData, 'Name'),
+                                      UserDataUtil.field(userData, 'ProfileImage'),
+                                      type);
 
-                                  if (result = true) {
-                                    // EasyLoading.dismiss();
+                                  EasyLoading.dismiss();
+                                  if (result == true) {
                                     EasyLoading.showSuccess(
                                         'Submitted successfully!');
 
-                                    Future.delayed(Duration(seconds: 6),
+                                    Future.delayed(Duration(seconds: 3),
                                         () async {
                                       EasyLoading.dismiss();
                                       print(
                                           "******Complaint Submitted successfully!******");
+                                      if (!context.mounted) return;
                                       Navigator.pop(context);
                                       Navigator.pushAndRemoveUntil(
                                           context,
@@ -496,7 +532,7 @@ class _ComplaintFormState extends State<ComplaintForm> {
                               }
                             } catch (e) {
                               print(e);
-
+                              EasyLoading.dismiss();
                               print("******Not Validate******");
                             } finally {}
                           },
@@ -637,7 +673,7 @@ class _ComplaintFormState extends State<ComplaintForm> {
     );
   }
 
-  Future<bool?> submitComplaint(
+  Future<bool> submitComplaint(
     String Address,
     String City,
     DateTime Date,
@@ -655,76 +691,65 @@ class _ComplaintFormState extends State<ComplaintForm> {
     String Type,
   ) async {
     final databaseRef = FirebaseService.instance.rootRef;
-    FirebaseStorage storage = FirebaseStorage.instance;
 
-    ///Get Last Complaint ID -1st Step
+    try {
+      final cidEvent = await databaseRef.child("/Complaints/lastCID").once();
+      var cid = int.tryParse('${cidEvent.snapshot.value}') ?? 0;
+      cid++;
 
-    var get_CID = databaseRef.child("/Complaints/lastCID");
-    DatabaseEvent event = await get_CID.once();
-    int CID = (event.snapshot.value).hashCode + 1;
-    print("************ Complaint ID = $CID**************");
+      print("************ Complaint ID = $cid**************");
 
-    if (CID != null) {
-      try {
-        print("************Get Complaint ID = $CID");
-        var data = {
-          "CID": CID,
-          "Address": Address,
-          "City": City,
-          "Date": Date.toString(),
-          "Description": Description,
-          "District": District,
-          "Email": Email,
-          "Image1": "",
-          "Image2": "",
-          "Latitude": Longitude,
-          "Longitude": Latitude,
-          "Mobile": Mobile,
-          "NIC": NIC,
-          "Name": Name,
-          "ProfileImage": ProfileImage,
-          "Reason": "",
-          "Status": "Pending",
-          "Type": Type
-        };
+      final data = {
+        "CID": cid,
+        "Address": Address,
+        "City": City,
+        "Date": Date.toString(),
+        "Description": Description,
+        "District": District,
+        "Email": Email,
+        "Image1": "",
+        "Image2": "",
+        "Latitude": Latitude,
+        "Longitude": Longitude,
+        "Mobile": Mobile,
+        "NIC": NIC,
+        "Name": Name,
+        "ProfileImage": ProfileImage,
+        "Reason": "",
+        "Status": "Pending",
+        "Type": Type,
+      };
 
-        ///Save Complaint - 2nd Step
+      await databaseRef.child("/Complaints/All/$cid").set(data);
+      print("**************Save Complaint response ");
 
-        databaseRef.child("/Complaints/All/").child("$CID").set(data);
-        print("**************Save Complaint response ");
+      final image1Url = await StorageService.uploadFile(
+        storagePath: "complaints/${cid}_1",
+        file: Image1,
+      );
+      final image2Url = await StorageService.uploadFile(
+        storagePath: "complaints/${cid}_2",
+        file: Image2,
+      );
 
-        /// update complaints image Url
-
-        Reference ref_Im1 = storage.ref().child("/complaints/" + "$CID" "_1");
-        await ref_Im1.putFile(Image1);
-        Reference ref_Im2 = storage.ref().child("/complaints/" + "$CID" "_2");
-        await ref_Im2.putFile(Image2);
-        String image1Url = await ref_Im1.getDownloadURL();
-        String image2Url = await ref_Im2.getDownloadURL();
-        print("********Image_1 URL = $image1Url");
-        print("********Image_2 URL = $image2Url");
-
-        databaseRef
-            .child("/Complaints/All/$CID")
-            .update({'Image1': image1Url, 'Image2': image2Url});
-
-        ///Update Last Complaint ID
-        databaseRef.child("/Complaints/").update({'lastCID': CID});
-
-        ///Update Complaint Count
-        var getComplaintCount = databaseRef.child("/Complaints/ComplaintCount");
-        DatabaseEvent event = await getComplaintCount.once();
-        print(event.snapshot.value);
-        int Complaint_Count = (event.snapshot.value).hashCode + 1;
-        databaseRef
-            .child("/Complaints/")
-            .update({'ComplaintCount': Complaint_Count});
-
-        return true;
-      } catch (e) {
-        print(e);
-        return false;
+      final imageUpdates = <String, dynamic>{};
+      if (image1Url != null) imageUpdates['Image1'] = image1Url;
+      if (image2Url != null) imageUpdates['Image2'] = image2Url;
+      if (imageUpdates.isNotEmpty) {
+        await databaseRef.child("/Complaints/All/$cid").update(imageUpdates);
       }
+
+      await databaseRef.child("/Complaints/lastCID").set(cid);
+
+      final countEvent =
+          await databaseRef.child("/Complaints/ComplaintCount").once();
+      final count = int.tryParse('${countEvent.snapshot.value}') ?? 0;
+      await databaseRef.child("/Complaints/ComplaintCount").set(count + 1);
+
+      return true;
+    } catch (e) {
+      print(e);
+      return false;
     }
   }
 }
