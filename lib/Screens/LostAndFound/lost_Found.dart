@@ -18,6 +18,7 @@ import 'package:motion_toast/motion_toast.dart';
 import 'package:motion_toast/resources/arrays.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/sri_lanka_locations.dart';
 import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
@@ -84,12 +85,6 @@ class _LostFoundItemState extends State<LostFoundItem> {
   final GlobalKey<FormBuilderState> _fbKeyValidation =
       GlobalKey<FormBuilderState>();
   TextEditingController _txtLocation = TextEditingController();
-
-  var districts = ['Ampara','Anuradhapura','Badulla','Batticaloa', 'Colombo','Galle',
-    'Gampaha','Hambantota','Jaffna', 'Kalutara','Kandy', 'Kegalle', 'Hambantota', 'Kegalle' ];
-
-  var city = ['Gampaha','Veyangoda','Minuwangoda', 'Nittabuwa', 'Aththnagalla','Kaduwela','Kolonnawa', 'Maharagama','Kesbewa','Nugegoda','Ahangama', 'Ambalangoda' ,'Balapitiya' ];
-
 
   String selectDistrict = '';
   String selectCity = '';
@@ -244,13 +239,9 @@ class _LostFoundItemState extends State<LostFoundItem> {
                     validator: (value) =>
                         value == null ? "Enter Your District" : null,
 
-                    items: districts
-                        .map((district) => DropdownMenuItem(
-                              alignment: AlignmentDirectional.centerStart,
-                              value: district,
-                              child: Text(district),
-                            ))
-                        .toList(),
+                    items: SriLankaLocations.dropdownItems(
+                      SriLankaLocations.districts,
+                    ),
                   ),
                   SizedBox(height: 15),
                   FormBuilderDropdown(
@@ -270,13 +261,9 @@ class _LostFoundItemState extends State<LostFoundItem> {
                         value == null ? "Enter Your City" : null,
                     // initialValue: allGroups[0],
 
-                    items: city
-                        .map((city) => DropdownMenuItem(
-                              alignment: AlignmentDirectional.centerStart,
-                              value: city,
-                              child: Text(city),
-                            ))
-                        .toList(),
+                    items: SriLankaLocations.dropdownItems(
+                      SriLankaLocations.cities,
+                    ),
                   ),
                   SizedBox(height: 15),
                   SafeDateField(

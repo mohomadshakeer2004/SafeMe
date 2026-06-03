@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:easy_localization/easy_localization.dart';
+import 'package:safe_me/util/date_parse_util.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:safe_me/service/firebase_service.dart';
 import 'package:safe_me/service/userService.dart';
@@ -363,7 +364,10 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                                                 children: [
                                                                                   Text(
-                                                                                    DateFormat('yyyy-MM-dd').format(DateTime.parse("${(appointmentData.values.toList())[i]['RequestedDate']}")),
+                                                                                    formatStoredDate(
+                                                                                      (appointmentData.values.toList())[i]['RequestedDate'],
+                                                                                      pattern: 'yyyy-MM-dd',
+                                                                                    ),
                                                                                     style: TextStyle(
                                                                                       fontSize: 15,
                                                                                       // fontWeight: FontWeight.bold,
@@ -372,7 +376,10 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                                     ),
                                                                                   ),
                                                                                   Text(
-                                                                                    DateFormat('hh:mm a').format(DateTime.parse("${(appointmentData.values.toList())[i]['RequestedDate']}")),
+                                                                                    formatStoredDate(
+                                                                                      (appointmentData.values.toList())[i]['RequestedDate'],
+                                                                                      pattern: 'hh:mm a',
+                                                                                    ),
                                                                                     style: TextStyle(
                                                                                       fontSize: 15,
                                                                                       // fontWeight: FontWeight.bold,

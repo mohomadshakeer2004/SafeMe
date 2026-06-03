@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:safe_me/service/firebase_service.dart';
@@ -15,6 +13,7 @@ import '../../Resources/style.dart';
 import '../../widgets/drawer.dart';
 import '../home_base.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:safe_me/util/date_parse_util.dart';
 import '../../Controller/language_controller.dart';
 import 'complaintForm.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
@@ -33,41 +32,39 @@ class _ComplaintHomeState extends State<ComplaintHome> {
 
   RefreshController _refreshController =
       RefreshController(initialRefresh: false);
-  Map<String, dynamic> complaintData = {};
+  List<Map<String, dynamic>> myComplaints = [];
 
   getComplaintData() async {
-    final nic = await UserService().requireLoggedInNic();
-    if (nic == null) return;
-
     EasyLoading.show(status: "Getting Complaint Data");
     try {
-      final databaseRef = FirebaseService.instance.rootRef;
-      final event = await databaseRef.child('/Complaints/All').once();
-
-      if (event.snapshot.value == null) {
-        if (mounted) {
-          setState(() {
-            complaintData = {};
-          });
-        }
+      final sessionOk = await UserService().checkSession();
+      if (!sessionOk) {
+        debugPrint('Complaints: not logged in');
+        if (mounted) setState(() => myComplaints = []);
         return;
       }
 
-      final data = jsonDecode(jsonEncode(event.snapshot.value))
-          as Map<String, dynamic>;
+      final nic = await UserService().getLoggedInNic();
+      if (nic == null || nic.isEmpty) {
+        if (mounted) setState(() => myComplaints = []);
+        return;
+      }
+
+      final items =
+          await FirebaseService.instance.fetchMyComplaints(nic);
 
       if (!mounted) return;
       setState(() {
-        complaintData = data;
+        myComplaints = items;
       });
 
-      print(
-          "************ User Data = ${complaintData.values.toList()}**************");
+      debugPrint(
+          '************ My complaints (${nic}): ${myComplaints.length} **************');
     } catch (e) {
       debugPrint('Failed to load complaints: $e');
       if (mounted) {
         setState(() {
-          complaintData = {};
+          myComplaints = [];
         });
       }
     } finally {
@@ -223,16 +220,14 @@ class _ComplaintHomeState extends State<ComplaintHome> {
 
               child: LayoutBuilder(
                   builder: (BuildContext context, BoxConstraints constraints) {
-                return (complaintData.values.toList()).length > 0
+                return myComplaints.isNotEmpty
                     ? Container(
                         width: sysWidth,
                         height: constraints.maxHeight,
                         child: SingleChildScrollView(
                           child: Column(
                             children: [
-                              for (var i = 0;
-                                  i < (complaintData.values.toList()).length;
-                                  i++)
+                              for (var i = 0; i < myComplaints.length; i++)
                                 Padding(
                                   padding: const EdgeInsets.all(8.0),
                                   child: Column(
@@ -265,8 +260,8 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                               MaterialPageRoute(
                                                 builder: (context) =>
                                                     SingleSubmissionScreen(
-                                                        "${(complaintData.values.toList())[i]['CID']}",
-                                                        "${(complaintData.values.toList())[i]['NIC']}"),
+                                                        "${myComplaints[i]['CID']}",
+                                                        "${myComplaints[i]['NIC']}"),
                                               ),
                                             );
                                           },
@@ -289,7 +284,7 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                       child: RotatedBox(
                                                         quarterTurns: 3,
                                                         child: Text(
-                                                          "CID-${(complaintData.values.toList())[i]['CID']}",
+                                                          "CID-${myComplaints[i]['CID']}",
                                                           style: TextStyle(
                                                             fontSize: 15,
                                                             fontWeight:
@@ -356,8 +351,8 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                                             pagePosition) {
                                                                       var images =
                                                                           [
-                                                                        "${(complaintData.values.toList())[i]['Image1']}",
-                                                                        "${(complaintData.values.toList())[i]['Image2']}",
+                                                                        "${myComplaints[i]['Image1']}",
+                                                                        "${myComplaints[i]['Image2']}",
                                                                       ];
                                                                       return Container(
                                                                         child: images.isNotEmpty
@@ -433,7 +428,7 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                               ),
                                                               Flexible(
                                                                 child: Text(
-                                                                  "${(complaintData.values.toList())[i]['Type']}",
+                                                                  "${myComplaints[i]['Type']}",
                                                                   style:
                                                                       TextStyle(
                                                                     fontSize:
@@ -465,7 +460,7 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                                 ),
                                                               ),
                                                               Text(
-                                                                "${(complaintData.values.toList())[i]['District']}",
+                                                                "${myComplaints[i]['District']}",
                                                                 style:
                                                                     TextStyle(
                                                                   fontSize: 15,
@@ -495,7 +490,7 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                                 ),
                                                               ),
                                                               Text(
-                                                                "${(complaintData.values.toList())[i]['City']}",
+                                                                "${myComplaints[i]['City']}",
                                                                 style:
                                                                     TextStyle(
                                                                   fontSize: 15,
@@ -530,10 +525,10 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                                         .start,
                                                                 children: [
                                                                   Text(
-                                                                    DateFormat(
-                                                                            'yyyy-MM-dd')
-                                                                        .format(
-                                                                            DateTime.parse("${(complaintData.values.toList())[i]['Date']}")),
+                                                                    formatStoredDate(
+                                                                      myComplaints[i]['Date'],
+                                                                      pattern: 'yyyy-MM-dd',
+                                                                    ),
                                                                     style:
                                                                         TextStyle(
                                                                       fontSize:
@@ -546,10 +541,10 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                                     ),
                                                                   ),
                                                                   Text(
-                                                                    DateFormat(
-                                                                            'hh:mm a')
-                                                                        .format(
-                                                                            DateTime.parse("${(complaintData.values.toList())[i]['Date']}")),
+                                                                    formatStoredDate(
+                                                                      myComplaints[i]['Date'],
+                                                                      pattern: 'hh:mm a',
+                                                                    ),
                                                                     style:
                                                                         TextStyle(
                                                                       fontSize:
@@ -582,7 +577,7 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                                 ),
                                                               ),
                                                               Text(
-                                                                "${(complaintData.values.toList())[i]['Status']}",
+                                                                "${myComplaints[i]['Status']}",
                                                                 style:
                                                                     TextStyle(
                                                                   fontSize: 15,

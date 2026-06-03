@@ -110,4 +110,52 @@ class FirebaseService {
   Future<void> signOut() async {
     await FirebaseAuth.instance.signOut();
   }
+
+  /// Complaints for the logged-in user (excludes Lost & Found entries in the same node).
+  Future<List<Map<String, dynamic>>> fetchMyComplaints(String nic) async {
+    await ensureAuthenticatedForWrite();
+
+    final snapshot = await rootRef
+        .child('Complaints/All')
+        .get()
+        .timeout(rtdbTimeout);
+
+    if (!snapshot.exists || snapshot.value == null) {
+      return [];
+    }
+
+    final nicKey = nic.trim().toUpperCase();
+    final items = <Map<String, dynamic>>[];
+
+    void addEntry(dynamic value) {
+      if (value is! Map) return;
+      final entry = Map<String, dynamic>.from(
+        value.map((k, v) => MapEntry(k.toString(), v)),
+      );
+      final entryNic = entry['NIC']?.toString().trim().toUpperCase() ?? '';
+      if (entryNic != nicKey) return;
+      final type = entry['Type']?.toString() ?? '';
+      if (type == 'Lost And Found') return;
+      items.add(entry);
+    }
+
+    final raw = snapshot.value;
+    if (raw is Map) {
+      for (final value in raw.values) {
+        addEntry(value);
+      }
+    } else if (raw is List) {
+      for (final value in raw) {
+        addEntry(value);
+      }
+    }
+
+    items.sort((a, b) {
+      final aCid = int.tryParse('${a['CID']}') ?? 0;
+      final bCid = int.tryParse('${b['CID']}') ?? 0;
+      return bCid.compareTo(aCid);
+    });
+
+    return items;
+  }
 }

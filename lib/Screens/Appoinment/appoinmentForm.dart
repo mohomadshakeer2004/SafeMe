@@ -10,6 +10,7 @@ import 'package:motion_toast/resources/arrays.dart';
 import 'package:provider/provider.dart';
 // import 'package:safe_me/Screens/Schedule/appointment_base.dart';
 
+import '../../data/sri_lanka_locations.dart';
 import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
@@ -37,12 +38,6 @@ class _AppointmentFormState extends State<AppointmentForm> {
   bool isAgree = false;
 
   final _txtDescriptionController = TextEditingController();
-
-  var districts = ['Ampara','Anuradhapura','Badulla','Batticaloa', 'Colombo','Galle',
-    'Gampaha','Hambantota','Jaffna', 'Kalutara','Kandy', 'Kegalle', 'Hambantota', 'Kegalle' ];
-
-  var city = ['Gampaha','Veyangoda','Minuwangoda', 'Nittabuwa', 'Aththnagalla','Kaduwela','Kolonnawa', 'Maharagama','Kesbewa','Nugegoda','Ahangama', 'Ambalangoda' ,'Balapitiya' ];
-
 
   var AppointmentType = [
     'Minor Complaints',
@@ -135,13 +130,9 @@ class _AppointmentFormState extends State<AppointmentForm> {
                     validator: (value) =>
                         value == null ? "Enter Your District" : null,
 
-                    items: districts
-                        .map((district) => DropdownMenuItem(
-                              alignment: AlignmentDirectional.centerStart,
-                              value: district,
-                              child: Text(district),
-                            ))
-                        .toList(),
+                    items: SriLankaLocations.dropdownItems(
+                      SriLankaLocations.districts,
+                    ),
                   ),
                   SizedBox(height: 15),
                   FormBuilderDropdown(
@@ -161,13 +152,9 @@ class _AppointmentFormState extends State<AppointmentForm> {
                         value == null ? "Enter Your City" : null,
                     // initialValue: allGroups[0],
 
-                    items: city
-                        .map((city) => DropdownMenuItem(
-                              alignment: AlignmentDirectional.centerStart,
-                              value: city,
-                              child: Text(city),
-                            ))
-                        .toList(),
+                    items: SriLankaLocations.dropdownItems(
+                      SriLankaLocations.cities,
+                    ),
                   ),
                   SizedBox(height: 15),
                   SafeDateField(
