@@ -220,4 +220,70 @@ class FirebaseService {
         .remove()
         .timeout(rtdbTimeout);
   }
+
+  List<Map<String, dynamic>> _entriesForNic(
+    dynamic raw,
+    String nic, {
+    bool includeWithoutNic = false,
+  }) {
+    if (raw == null) return [];
+
+    final nicKey = nic.trim().toUpperCase();
+    final items = <Map<String, dynamic>>[];
+
+    void addEntry(dynamic value) {
+      if (value is! Map) return;
+      final entry = Map<String, dynamic>.from(
+        value.map((k, v) => MapEntry(k.toString(), v)),
+      );
+      final entryNic = entry['NIC']?.toString().trim().toUpperCase() ?? '';
+      if (entryNic.isNotEmpty && entryNic != nicKey) return;
+      if (!includeWithoutNic && entryNic.isEmpty) return;
+      items.add(entry);
+    }
+
+    if (raw is Map) {
+      for (final value in raw.values) {
+        addEntry(value);
+      }
+    } else if (raw is List) {
+      for (final value in raw) {
+        addEntry(value);
+      }
+    }
+
+    return items;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchMyPublicAppointments(String nic) async {
+    await ensureAuthenticatedForWrite();
+    final snapshot = await rootRef
+        .child('Appointments/PublicAppointments')
+        .get()
+        .timeout(rtdbTimeout);
+
+    final items = _entriesForNic(snapshot.value, nic);
+    items.sort((a, b) {
+      final aId = int.tryParse('${a['AID']}') ?? 0;
+      final bId = int.tryParse('${b['AID']}') ?? 0;
+      return bId.compareTo(aId);
+    });
+    return items;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchMyPoliceAppointments(String nic) async {
+    await ensureAuthenticatedForWrite();
+    final snapshot = await rootRef
+        .child('Appointments/PoliceAppointments')
+        .get()
+        .timeout(rtdbTimeout);
+
+    final items = _entriesForNic(snapshot.value, nic);
+    items.sort((a, b) {
+      final aId = int.tryParse('${a['AIDP']}') ?? 0;
+      final bId = int.tryParse('${b['AIDP']}') ?? 0;
+      return bId.compareTo(aId);
+    });
+    return items;
+  }
 }

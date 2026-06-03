@@ -1,8 +1,5 @@
-import 'dart:convert';
-
 import 'package:easy_localization/easy_localization.dart';
 import 'package:safe_me/util/date_parse_util.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:safe_me/service/firebase_service.dart';
 import 'package:safe_me/service/userService.dart';
 import 'package:flutter/material.dart';
@@ -31,64 +28,68 @@ class _AppointmentBaseState extends State<AppointmentBase> {
   RefreshController _refreshController =
       RefreshController(initialRefresh: false);
 
-  Map<String, dynamic> appointmentData = {};
-  Map<String, dynamic> pAppointmentData = {};
+  List<Map<String, dynamic>> myPublicAppointments = [];
+  List<Map<String, dynamic>> myPoliceAppointments = [];
 
-  getAppointmentData() async {
-    final nic = await UserService().requireLoggedInNic();
-    if (nic == null) return;
+  Future<void> _loadAppointments() async {
     EasyLoading.show(status: "Getting Appointment Data");
-    final databaseRef = FirebaseService.instance.rootRef;
+    try {
+      final sessionOk = await UserService().checkSession();
+      if (!sessionOk) {
+        if (mounted) {
+          setState(() {
+            myPublicAppointments = [];
+            myPoliceAppointments = [];
+          });
+        }
+        return;
+      }
 
-    var get_AppointmentData =
-        databaseRef.child('/Appointments/PublicAppointments/');
-    DatabaseEvent event = await get_AppointmentData.once();
+      final nic = await UserService().getLoggedInNic();
+      if (nic == null || nic.isEmpty) {
+        if (mounted) {
+          setState(() {
+            myPublicAppointments = [];
+            myPoliceAppointments = [];
+          });
+        }
+        return;
+      }
 
-    Map<String, dynamic> data =
-        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
-    setState(() {
-      appointmentData = data;
-    });
+      final firebase = FirebaseService.instance;
+      final public = await firebase.fetchMyPublicAppointments(nic);
+      final police = await firebase.fetchMyPoliceAppointments(nic);
 
-    print(
-        "************get_AppointmentData = ${appointmentData.values.toList()}**************");
-    EasyLoading.dismiss();
-  }
+      if (!mounted) return;
+      setState(() {
+        myPublicAppointments = public;
+        myPoliceAppointments = police;
+      });
 
-  getPoliceAppointmentData() async {
-    final nic = await UserService().requireLoggedInNic();
-    if (nic == null) return;
-    EasyLoading.show(status: "Getting Police Appointment Data");
-    final databaseRef = FirebaseService.instance.rootRef;
-
-    var get_policeAppointmentData =
-        databaseRef.child('/Appointments/PoliceAppointments/');
-    DatabaseEvent event = await get_policeAppointmentData.once();
-
-    Map<String, dynamic> data =
-        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
-    setState(() {
-      pAppointmentData = data;
-    });
-
-    print(
-        "************get_police AppointmentData = ${pAppointmentData.values.toList()}**************");
-    EasyLoading.dismiss();
+      debugPrint(
+          'My appointments ($nic): public=${public.length}, police=${police.length}');
+    } catch (e) {
+      debugPrint('Failed to load appointments: $e');
+      if (mounted) {
+        setState(() {
+          myPublicAppointments = [];
+          myPoliceAppointments = [];
+        });
+      }
+    } finally {
+      EasyLoading.dismiss();
+    }
   }
 
   void _onRefresh() async {
-    print("REFRESH STARTED");
-    getAppointmentData();
-    getPoliceAppointmentData();
+    await _loadAppointments();
     _refreshController.refreshCompleted();
-    print("REFRESH STOPPED");
   }
 
   @override
   void initState() {
     super.initState();
-    getAppointmentData();
-    getPoliceAppointmentData();
+    _loadAppointments();
   }
 
   @override
@@ -228,9 +229,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                               child: LayoutBuilder(builder:
                                   (BuildContext context,
                                       BoxConstraints constraints) {
-                                return (appointmentData.values.toList())
-                                            .length >
-                                        0
+                                return myPublicAppointments.isNotEmpty
                                     ? Container(
                                         width: sysWidth,
                                         height: constraints.maxHeight,
@@ -239,8 +238,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                             children: [
                                               for (var i = 0;
                                                   i <
-                                                      (appointmentData.values
-                                                              .toList())
+                                                      myPublicAppointments
                                                           .length;
                                                   i++)
                                                 Padding(
@@ -285,8 +283,8 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                             //   MaterialPageRoute(
                                                             //     builder: (context) =>
                                                             //         SingleSubmissionScreen(
-                                                            //             "${(appointmentData.values.toList())[i]['CID']}",
-                                                            //             "${(appointmentData.values.toList())[i]['NIC']}"),
+                                                            //             "${myPublicAppointments[i]['CID']}",
+                                                            //             "${myPublicAppointments[i]['NIC']}"),
                                                             //   ),
                                                             // );
                                                           },
@@ -338,7 +336,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                               ),
                                                                               Flexible(
                                                                                 child: Text(
-                                                                                  "${(appointmentData.values.toList())[i]['Type']}",
+                                                                                  "${myPublicAppointments[i]['Type']}",
                                                                                   style: TextStyle(
                                                                                     fontSize: 15,
                                                                                     // fontWeight: FontWeight.bold,
@@ -365,7 +363,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                                 children: [
                                                                                   Text(
                                                                                     formatStoredDate(
-                                                                                      (appointmentData.values.toList())[i]['RequestedDate'],
+                                                                                      myPublicAppointments[i]['RequestedDate'],
                                                                                       pattern: 'yyyy-MM-dd',
                                                                                     ),
                                                                                     style: TextStyle(
@@ -377,7 +375,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                                   ),
                                                                                   Text(
                                                                                     formatStoredDate(
-                                                                                      (appointmentData.values.toList())[i]['RequestedDate'],
+                                                                                      myPublicAppointments[i]['RequestedDate'],
                                                                                       pattern: 'hh:mm a',
                                                                                     ),
                                                                                     style: TextStyle(
@@ -406,7 +404,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                                                 children: [
                                                                                   Text(
-                                                                                    "${(appointmentData.values.toList())[i]['ScheduledDate']}",
+                                                                                    "${myPublicAppointments[i]['ScheduledDate']}",
                                                                                     style: TextStyle(
                                                                                       fontSize: 15,
                                                                                       // fontWeight: FontWeight.bold,
@@ -430,7 +428,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                                 ),
                                                                               ),
                                                                               Text(
-                                                                                "${(appointmentData.values.toList())[i]['Description']}",
+                                                                                "${myPublicAppointments[i]['Description']}",
                                                                                 style: TextStyle(
                                                                                   fontSize: 15,
                                                                                   // fontWeight: FontWeight.bold,
@@ -481,8 +479,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                           Container(
                             child: LayoutBuilder(builder: (BuildContext context,
                                 BoxConstraints constraints) {
-                              return (pAppointmentData.values.toList()).length >
-                                      0
+                              return myPoliceAppointments.isNotEmpty
                                   ? Container(
                                       width: sysWidth,
                                       height: constraints.maxHeight,
@@ -490,10 +487,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                         child: Column(
                                           children: [
                                             for (var i = 0;
-                                                i <
-                                                    (pAppointmentData.values
-                                                            .toList())
-                                                        .length;
+                                                i < myPoliceAppointments.length;
                                                 i++)
                                               Padding(
                                                 padding:
@@ -535,8 +529,8 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                           //   MaterialPageRoute(
                                                           //     builder: (context) =>
                                                           //         SingleSubmissionScreen(
-                                                          //             "${(appointmentData.values.toList())[i]['CID']}",
-                                                          //             "${(appointmentData.values.toList())[i]['NIC']}"),
+                                                          //             "${myPublicAppointments[i]['CID']}",
+                                                          //             "${myPublicAppointments[i]['NIC']}"),
                                                           //   ),
                                                           // );
                                                         },
@@ -588,7 +582,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                             ),
                                                                             Flexible(
                                                                               child: Text(
-                                                                                "${(pAppointmentData.values.toList())[i]['AIDP']}",
+                                                                                "${myPoliceAppointments[i]['AIDP']}",
                                                                                 style: TextStyle(
                                                                                   fontSize: 15,
                                                                                   // fontWeight: FontWeight.bold,
@@ -612,7 +606,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                             ),
                                                                             Flexible(
                                                                               child: Text(
-                                                                                "${(pAppointmentData.values.toList())[i]['Type']}",
+                                                                                "${myPoliceAppointments[i]['Type']}",
                                                                                 style: TextStyle(
                                                                                   fontSize: 15,
                                                                                   // fontWeight: FontWeight.bold,
@@ -638,7 +632,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                               crossAxisAlignment: CrossAxisAlignment.start,
                                                                               children: [
                                                                                 Text(
-                                                                                  "${(pAppointmentData.values.toList())[i]['ScheduledDate']}",
+                                                                                  "${myPoliceAppointments[i]['ScheduledDate']}",
                                                                                   style: TextStyle(
                                                                                     fontSize: 15,
                                                                                     // fontWeight: FontWeight.bold,
@@ -663,7 +657,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                             ),
                                                                             Flexible(
                                                                               child: Text(
-                                                                                "${(pAppointmentData.values.toList())[i]['City']}",
+                                                                                "${myPoliceAppointments[i]['City']}",
                                                                                 style: TextStyle(
                                                                                   fontSize: 15,
                                                                                   // fontWeight: FontWeight.bold,
