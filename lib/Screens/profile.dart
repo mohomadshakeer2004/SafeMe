@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_svg/svg.dart';
@@ -12,6 +11,10 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:safe_me/service/firebase_service.dart';
+import 'package:safe_me/service/storage_service.dart';
+import 'package:safe_me/service/userService.dart';
+import 'package:safe_me/util/user_data_util.dart';
 
 import '../Controller/language_controller.dart';
 import '../Resources/colors.dart';
@@ -68,23 +71,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   getUserData() async {
-    String nic = "951240999V";
+    final nic = await UserService().requireLoggedInNic();
+    if (nic == null) return;
     EasyLoading.show(status: "Getting User Data");
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final databaseRef = FirebaseService.instance.rootRef;
 
     var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
     DatabaseEvent event = await get_UserData.once();
-    String aa = (event.snapshot.value).toString();
-    Map<String, dynamic> data =
-        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
+
+    if (event.snapshot.value == null) {
+      EasyLoading.dismiss();
+      return;
+    }
+
+    Map<String, dynamic> data = UserDataUtil.withDefaults(
+      jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>,
+      nic,
+    );
     setState(() {
       userData = data;
 
-      _txtFNameController.text = userData['Name'];
-      _txtEmailController.text = userData['Email'];
-      _txtNicNoController.text = userData['NIC'];
-      _txtMobileNoController.text = userData['Mobile'];
-      _txtAddressController.text = userData['Address'];
+      _txtFNameController.text = UserDataUtil.field(data, 'Name');
+      _txtEmailController.text = UserDataUtil.field(data, 'Email');
+      _txtNicNoController.text = UserDataUtil.field(data, 'NIC', fallback: nic);
+      _txtMobileNoController.text = UserDataUtil.field(data, 'Mobile');
+      _txtAddressController.text = UserDataUtil.field(data, 'Address');
     });
 
     print("************ User Data = ${data}**************");
@@ -179,7 +190,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
                                 Text(
-                                  userData['Name'],
+                                  UserDataUtil.field(userData, 'Name'),
                                   style: TextStyle(
                                       color: normalTextColor,
                                       fontWeight: FontWeight.bold,
@@ -188,7 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                                 SizedBox(height: 3),
                                 Text(
-                                  userData['Email'],
+                                  UserDataUtil.field(userData, 'Email'),
                                   style: TextStyle(
                                       color: normalTextColor,
                                       fontFamily: 'Poppins-Light',
@@ -212,7 +223,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ? getCircleAvatarWidget(
                                       FileImage(File(_imageFile!.path)))
                                   : CachedNetworkImage(
-                                      imageUrl: userData['ProfileImage'],
+                                      imageUrl:
+                                          UserDataUtil.field(userData, 'ProfileImage'),
                                       imageBuilder: (context, imageProvider) =>
                                           getCircleAvatarWidget(imageProvider),
                                       placeholder: (context, url) =>
@@ -336,26 +348,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           onTap: () async {
                             EasyLoading.show(status: "Saving data...");
 
-                            var result = await updateProfile(
-                                userData['NIC'],
+                            try {
+                              final imageSkipped = await updateProfile(
+                                UserDataUtil.field(userData, 'NIC'),
                                 _txtFNameController.text,
                                 _txtAddressController.text,
                                 _txtEmailController.text,
                                 _txtMobileNoController.text,
-                                userData['ProfileImage'],
-                                _imageFile!.path.toString());
+                                _imageFile?.path,
+                              );
 
-                            if (result = true) {
                               EasyLoading.dismiss();
-                              EasyLoading.showSuccess(
-                                  'Profile Updated Successfully!');
+                              if (imageSkipped) {
+                                EasyLoading.showInfo(StorageService.sparkPlanMessage);
+                              } else {
+                                EasyLoading.showSuccess(
+                                    'Profile Updated Successfully!');
+                              }
 
-                              Future.delayed(Duration(milliseconds: 3500),
-                              () {
-                                print("******Profile Updated successfully!******");
+                              Future.delayed(const Duration(milliseconds: 3500),
+                                  () {
                                 _onRefresh();
-                              },);
-
+                              });
+                            } catch (e) {
+                              EasyLoading.dismiss();
+                              EasyLoading.showError('Failed to update profile');
+                              print(e);
                             }
                           },
                           child: Container(
@@ -486,30 +504,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  Future<void> updateProfile(
+  /// Returns true when profile text was saved but image upload was skipped.
+  Future<bool> updateProfile(
     String NIC,
     String Name,
     String Address,
     String Email,
     String Mobile,
-    String oldProImage,
-    String ProfileImage,
+    String? newImagePath,
   ) async {
-    final databaseRef = FirebaseDatabase.instance.ref();
-    FirebaseStorage storage = FirebaseStorage.instance;
+    await FirebaseService.instance.ensureAuthenticated();
 
-    try {
-      var data = {
-        "Name": Name,
-        "Address": Address,
-        "Email": Email,
-        "Mobile": Mobile,
-        // "ProfileImage": imageUrl,
-      };
+    final databaseRef = FirebaseService.instance.rootRef;
 
-      databaseRef.child("/PublicUsers/All/$NIC").update(data);
-    } catch (e) {
-      return print(e);
+    var data = <String, dynamic>{
+      "Name": Name,
+      "Address": Address,
+      "Email": Email,
+      "Mobile": Mobile,
+      "NIC": NIC,
+    };
+
+    var imageUploadSkipped = false;
+
+    if (newImagePath != null && newImagePath.isNotEmpty) {
+      final imageUrl = await StorageService.uploadFile(
+        storagePath: 'public profile images/$NIC',
+        file: File(newImagePath),
+      );
+      if (imageUrl != null) {
+        data["ProfileImage"] = imageUrl;
+      } else {
+        imageUploadSkipped = true;
+      }
     }
+
+    await databaseRef.child("/PublicUsers/All/$NIC").update(data);
+    return imageUploadSkipped;
   }
 }

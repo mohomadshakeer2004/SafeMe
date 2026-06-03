@@ -10,6 +10,9 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:flutter_phone_direct_caller/flutter_phone_direct_caller.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:safe_me/service/firebase_service.dart';
+import 'package:safe_me/service/userService.dart';
+import 'package:safe_me/util/user_data_util.dart';
 import '../Screens/Complaint/complaint_base.dart';
 import '../Screens/EmergencyContact/emergencyContact.dart';
 import '../Screens/LostAndFound/lost_Found.dart';
@@ -48,15 +51,22 @@ class _HomeScreenState extends State<HomeScreen> {
   TextEditingController _txtLocation = TextEditingController();
 
   getUserData() async {
-    String nic = "951240999V";
-    // EasyLoading.show(status: "Getting User Data");
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final nic = await UserService().requireLoggedInNic();
+    if (nic == null) return;
+    final databaseRef = FirebaseService.instance.rootRef;
 
     var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
     DatabaseEvent event = await get_UserData.once();
-    String aa = (event.snapshot.value).toString();
-    Map<String, dynamic> data =
-        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
+
+    if (event.snapshot.value == null) {
+      EasyLoading.dismiss();
+      return;
+    }
+
+    Map<String, dynamic> data = UserDataUtil.withDefaults(
+      jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>,
+      nic,
+    );
     setState(() {
       userData = data;
     });
@@ -99,15 +109,15 @@ class _HomeScreenState extends State<HomeScreen> {
           openPlayer();
           print("*************************ShakeDetector Start*****************************");
           submitSafeMe(
-              userData['Address'],
+              UserDataUtil.field(userData, 'Address'),
               DateTime.now(),
-              userData['Email'],
+              UserDataUtil.field(userData, 'Email'),
               _position.latitude,
               _position.longitude,
-              int.parse(userData['Mobile']),
-              userData['NIC'],
-              userData['Name'],
-              userData['ProfileImage']);
+              UserDataUtil.mobileAsInt(userData),
+              UserDataUtil.field(userData, 'NIC'),
+              UserDataUtil.field(userData, 'Name'),
+              UserDataUtil.field(userData, 'ProfileImage'));
         }
       },
     );
@@ -577,7 +587,7 @@ class _HomeScreenState extends State<HomeScreen> {
     String ProfileImage,
   ) async {
     print("//////////////////////////////////////////////////////////////");
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final databaseRef = FirebaseService.instance.rootRef;
     FirebaseStorage storage = FirebaseStorage.instance;
     EasyLoading.show(status: "Submitting...");
 

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:safe_me/service/firebase_service.dart';
+import 'package:safe_me/service/userService.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
@@ -66,7 +68,7 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
 
   getComplaintData() async {
     EasyLoading.show(status: "Getting Complaint Data");
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final databaseRef = FirebaseService.instance.rootRef;
 
     var get_UserData = databaseRef.child('/Complaints/All').child(widget.CID);
     DatabaseEvent event = await get_UserData.once();
@@ -82,9 +84,10 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
   }
 
   getUserData() async {
-    String nic = "951240999V";
+    final nic = await UserService().requireLoggedInNic();
+    if (nic == null) return;
     EasyLoading.show(status: "Getting User Data");
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final databaseRef = FirebaseService.instance.rootRef;
 
     var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
     DatabaseEvent event = await get_UserData.once();

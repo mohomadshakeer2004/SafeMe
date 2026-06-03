@@ -11,6 +11,8 @@ import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:safe_me/service/firebase_service.dart';
+import 'package:safe_me/service/userService.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:motion_toast/motion_toast.dart';
 import 'package:motion_toast/resources/arrays.dart';
@@ -145,9 +147,10 @@ class _SafeMeFormState extends State<SafeMeForm> {
   final _txtDescriptionController = TextEditingController();
 
   getUserData() async {
-    String nic = "951240999V";
+    final nic = await UserService().requireLoggedInNic();
+    if (nic == null) return;
     EasyLoading.show(status: "Getting User Data");
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final databaseRef = FirebaseService.instance.rootRef;
 
     var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
     DatabaseEvent event = await get_UserData.once();
@@ -721,7 +724,7 @@ class _SafeMeFormState extends State<SafeMeForm> {
     String Name,
     String ProfileImage,
   ) async {
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final databaseRef = FirebaseService.instance.rootRef;
     FirebaseStorage storage = FirebaseStorage.instance;
     EasyLoading.show(status: "Submitting...");
 

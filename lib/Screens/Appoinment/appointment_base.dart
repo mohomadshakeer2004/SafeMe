@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:safe_me/service/firebase_service.dart';
+import 'package:safe_me/service/userService.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
@@ -32,9 +34,10 @@ class _AppointmentBaseState extends State<AppointmentBase> {
   Map<String, dynamic> pAppointmentData = {};
 
   getAppointmentData() async {
-    String nic = "951240999V";
+    final nic = await UserService().requireLoggedInNic();
+    if (nic == null) return;
     EasyLoading.show(status: "Getting Appointment Data");
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final databaseRef = FirebaseService.instance.rootRef;
 
     var get_AppointmentData =
         databaseRef.child('/Appointments/PublicAppointments/');
@@ -52,9 +55,10 @@ class _AppointmentBaseState extends State<AppointmentBase> {
   }
 
   getPoliceAppointmentData() async {
-    String nic = "951240999V";
+    final nic = await UserService().requireLoggedInNic();
+    if (nic == null) return;
     EasyLoading.show(status: "Getting Police Appointment Data");
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final databaseRef = FirebaseService.instance.rootRef;
 
     var get_policeAppointmentData =
         databaseRef.child('/Appointments/PoliceAppointments/');

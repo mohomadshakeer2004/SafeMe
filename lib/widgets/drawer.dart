@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:firebase_database/firebase_database.dart';
+import 'package:safe_me/service/firebase_service.dart';
+import 'package:safe_me/service/userService.dart';
+import 'package:safe_me/util/user_data_util.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
@@ -20,15 +23,23 @@ class _DrawerWidgetState extends State<DrawerWidget> {
   Map<String, dynamic> userData = {};
 
   getUserData() async {
-    String nic = "951240999V";
+    final nic = await UserService().requireLoggedInNic();
+    if (nic == null) return;
     EasyLoading.show(status: "Getting User Data");
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final databaseRef = FirebaseService.instance.rootRef;
 
     var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
     DatabaseEvent event = await get_UserData.once();
-    String aa = (event.snapshot.value).toString();
-    Map<String, dynamic> data =
-    jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
+
+    if (event.snapshot.value == null) {
+      EasyLoading.dismiss();
+      return;
+    }
+
+    Map<String, dynamic> data = UserDataUtil.withDefaults(
+      jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>,
+      nic,
+    );
     setState(() {
       userData = data;
     });
@@ -86,7 +97,7 @@ class _DrawerWidgetState extends State<DrawerWidget> {
                       radius: 45,
                       backgroundColor: boxLineColor,
                       child: CachedNetworkImage(
-                        imageUrl:userData['ProfileImage'],
+                        imageUrl: UserDataUtil.field(userData, 'ProfileImage'),
                                  imageBuilder: (context, imageProvider) => CircleAvatar(
                           radius: 43,
                           backgroundColor: Colors.black12,
@@ -105,7 +116,7 @@ class _DrawerWidgetState extends State<DrawerWidget> {
                     ),
                     SizedBox(height: 15),
                     Text(
-                      userData['Name'],
+                      UserDataUtil.field(userData, 'Name'),
                       style: TextStyle(
                           color: textColor_2,
                           fontWeight: FontWeight.bold,
@@ -114,7 +125,7 @@ class _DrawerWidgetState extends State<DrawerWidget> {
                     ),
                     SizedBox(height: 5),
                     Text(
-                      userData['Email'],
+                      UserDataUtil.field(userData, 'Email'),
                       style: TextStyle(
                           color: Colors.white60,
                           fontFamily: 'Poppins-Light',

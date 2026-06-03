@@ -1,0 +1,100 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:safe_me/firebase_options.dart';
+
+/// Shared Firebase Realtime Database + auth helpers for [safe-a67e3].
+class FirebaseService {
+  FirebaseService._();
+
+  static final FirebaseService instance = FirebaseService._();
+
+  static const String loggedInNicKey = 'logged_in_nic';
+
+  /// Single Firebase Auth account used for all app users (RTDB rules need auth).
+  static const String firebaseAuthEmail = 'admin@safeme.app';
+
+  /// Firebase requires ≥6 characters. Set the same value on [firebaseAuthEmail] in Console.
+  static const String firebaseAuthPassword = 'SafeMe123';
+
+  FirebaseDatabase? _database;
+
+  FirebaseDatabase get database {
+    _database ??= FirebaseDatabase.instanceFor(
+      app: Firebase.app(),
+      databaseURL: DefaultFirebaseOptions.databaseUrl,
+    );
+    return _database!;
+  }
+
+  DatabaseReference get rootRef => database.ref();
+
+  /// Signs in with the shared admin account (not the user's RTDB password).
+  Future<UserCredential> signInAsAdmin() {
+    return FirebaseAuth.instance.signInWithEmailAndPassword(
+      email: firebaseAuthEmail,
+      password: firebaseAuthPassword,
+    );
+  }
+
+  /// Verifies NIC + password against Realtime Database [PublicUsers].
+  Future<bool> validateNicPassword(String nic, String password) async {
+    final nicKey = nic.trim().toUpperCase();
+
+    final passwordRef = rootRef
+        .child('/PublicUsers/All/')
+        .child(nicKey)
+        .child('Password');
+
+    final DatabaseEvent event = await passwordRef.once();
+    final storedPassword = event.snapshot.value;
+
+    if (storedPassword == null) {
+      return false;
+    }
+
+    return password.trim() == storedPassword.toString().trim();
+  }
+
+  /// Legacy RTDB users: sign in anonymously, verify NIC/password, then use admin auth.
+  Future<bool> migrateLegacyUser(String nic, String password) async {
+    final nicKey = nic.trim().toUpperCase();
+
+    try {
+      await FirebaseAuth.instance.signInAnonymously();
+    } on FirebaseAuthException catch (e) {
+      print('Anonymous auth failed (${e.code}): ${e.message}');
+      return false;
+    }
+
+    try {
+      final valid = await validateNicPassword(nicKey, password);
+      if (!valid) {
+        await signOut();
+        return false;
+      }
+
+      await signOut();
+      await signInAsAdmin();
+      return true;
+    } catch (e) {
+      print(e);
+      await signOut();
+      return false;
+    }
+  }
+
+  Future<void> ensureAuthenticated() async {
+    if (FirebaseAuth.instance.currentUser != null) {
+      return;
+    }
+    throw FirebaseAuthException(
+      code: 'not-signed-in',
+      message: 'Please log in again.',
+    );
+  }
+
+  Future<void> signOut() async {
+    await FirebaseAuth.instance.signOut();
+  }
+}

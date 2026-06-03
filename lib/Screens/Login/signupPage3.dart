@@ -12,9 +12,11 @@ import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../service/firebase_service.dart';
+import '../../service/storage_service.dart';
 import '../../service/userService.dart';
 import 'LoginPage.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SignupScreen3 extends StatefulWidget {
   SignupScreen3(this.fName, this.lName, this.NIC, this.mobileNo, this.email,
@@ -377,8 +379,16 @@ class _SignupScreen3State extends State<SignupScreen3> {
     String Password,
     String ProfileImage,
   ) async {
-    final databaseRef = FirebaseDatabase.instance.ref();
-    FirebaseStorage storage = FirebaseStorage.instance;
+    final nicKey = NIC.trim().toUpperCase();
+
+    try {
+      await FirebaseService.instance.signInAsAdmin();
+    } on FirebaseAuthException catch (e) {
+      print('Auth signup failed (${e.code}): ${e.message}');
+      return print(e);
+    }
+
+    final databaseRef = FirebaseService.instance.rootRef;
 
     try {
       var data = {
@@ -399,26 +409,32 @@ class _SignupScreen3State extends State<SignupScreen3> {
       print(
           "**************Save User Data Step-1 response = ${response.toString()}");
 
-      /// Save User step -2 Profile Image
-      Reference ref = storage.ref().child("/public profile images/" + NIC);
-      await ref.putFile(File(ProfileImage));
-      String imageUrl = await ref.getDownloadURL();
-      print("********Image URL = $imageUrl");
-
-      ///Save User Data step - 3 update image Url
-      databaseRef
-          .child("/PublicUsers/All/$NIC")
-          .update({'ProfileImage': imageUrl});
+      /// Save User step -2 Profile Image (optional — requires Blaze plan)
+      final imageUrl = await StorageService.uploadFile(
+        storagePath: 'public profile images/$NIC',
+        file: File(ProfileImage),
+      );
+      if (imageUrl != null) {
+        print("********Image URL = $imageUrl");
+        await databaseRef
+            .child("/PublicUsers/All/$NIC")
+            .update({'ProfileImage': imageUrl});
+      }
 
       ///Update User Count
       DatabaseReference ref1 =
-          FirebaseDatabase.instance.ref("/PublicUsers/UserCount");
+          FirebaseService.instance.rootRef.child("/PublicUsers/UserCount");
       DatabaseEvent event = await ref1.once();
       print(event.snapshot.value);
 
       int userCount = (event.snapshot.value) as int;
       databaseRef.child("/PublicUsers").update({'UserCount': userCount + 1});
 
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        FirebaseService.loggedInNicKey,
+        nicKey,
+      );
     } catch (e) {
       return print(e);
     }

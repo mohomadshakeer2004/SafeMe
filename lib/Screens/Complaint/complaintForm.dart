@@ -3,6 +3,8 @@ import 'dart:ffi';
 import 'dart:io';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:safe_me/service/firebase_service.dart';
+import 'package:safe_me/service/userService.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -126,9 +128,10 @@ class _ComplaintFormState extends State<ComplaintForm> {
   final _txtDescriptionController = TextEditingController();
 
   getUserData() async {
-    String nic = "951240999V";
+    final nic = await UserService().requireLoggedInNic();
+    if (nic == null) return;
     EasyLoading.show(status: "Getting User Data");
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final databaseRef = FirebaseService.instance.rootRef;
 
     var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
     DatabaseEvent event = await get_UserData.once();
@@ -651,7 +654,7 @@ class _ComplaintFormState extends State<ComplaintForm> {
     String ProfileImage,
     String Type,
   ) async {
-    final databaseRef = FirebaseDatabase.instance.ref();
+    final databaseRef = FirebaseService.instance.rootRef;
     FirebaseStorage storage = FirebaseStorage.instance;
 
     ///Get Last Complaint ID -1st Step

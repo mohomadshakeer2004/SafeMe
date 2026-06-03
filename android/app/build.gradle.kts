@@ -14,7 +14,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.safe_me.safe_me"
+    namespace = "com.safe_me.safe_me1"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -28,7 +28,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.safe_me.safe_me"
+        applicationId = "com.safe_me.safe_me1"
         minSdk = 29
         targetSdk = 36
         versionCode = flutter.versionCode
@@ -66,6 +66,7 @@ flutter {
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.13.0"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-auth")
     implementation("com.google.android.material:material:1.12.0")
     implementation("com.google.android.gms:play-services-location:21.3.0")
 }

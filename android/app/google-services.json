@@ -1,45 +1,27 @@
 {
   "project_info": {
-    "project_number": "136110861984",
-    "firebase_url": "https://safeme-50a06-default-rtdb.firebaseio.com",
-    "project_id": "safeme-50a06",
-    "storage_bucket": "safeme-50a06.appspot.com"
+    "project_number": "402309077340",
+    "firebase_url": "https://safe-a67e3-default-rtdb.firebaseio.com",
+    "project_id": "safe-a67e3",
+    "storage_bucket": "safe-a67e3.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:136110861984:android:68a806614605029cf8e3c5",
+        "mobilesdk_app_id": "1:402309077340:android:7f68eb69516366a436c999",
         "android_client_info": {
-          "package_name": "com.safe_me.safe_me"
+          "package_name": "com.safe_me.safe_me1"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "136110861984-d1nl3sfutei0teodhdiarcnuo388r5ps.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.safe_me.safe_me",
-            "certificate_hash": "a1bb61f6b3a294a6d39a62ef2860e0b763389926"
-          }
-        },
-        {
-          "client_id": "136110861984-2mc3hi49acf5jub20uotukoc77kalbao.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDPHZvtfeugCYAu9E9YnhPIAEcTQ0Yn6V8"
+          "current_key": "AIzaSyAquwLiBkBsKx3Izzkagiuj0Ogmo8tzyQ8"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "136110861984-2mc3hi49acf5jub20uotukoc77kalbao.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }

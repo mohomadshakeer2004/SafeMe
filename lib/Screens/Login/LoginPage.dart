@@ -1,5 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
@@ -28,7 +28,7 @@ class _LoginPageState extends State<LoginPage> {
   final GlobalKey<FormBuilderState> _fbKeyValidation =
       GlobalKey<FormBuilderState>();
 
-  late UserService _userService;
+  final UserService _userService = UserService();
 
   final _txtEmailController = TextEditingController();
   final _txtPasswordController = TextEditingController();
@@ -151,9 +151,20 @@ class _LoginPageState extends State<LoginPage> {
                                     "*********${_fbKey.currentState?.value}***********");
                                 EasyLoading.show(status: "Logging..");
 
-                                var result = await _login(
+                                bool result = false;
+                                String? errorMessage;
+                                try {
+                                  result = await _userService.login(
                                     _fbKey.currentState!.value["nic"],
-                                    _fbKey.currentState!.value["password"]);
+                                    _fbKey.currentState!.value["password"],
+                                  );
+                                } on FirebaseAuthException catch (e) {
+                                  errorMessage =
+                                      UserService.messageForAuthError(e) ??
+                                          (e.message ?? e.code);
+                                } catch (e) {
+                                  errorMessage = e.toString();
+                                }
 
                                 EasyLoading.dismiss();
                                 if (result == true) {
@@ -168,14 +179,13 @@ class _LoginPageState extends State<LoginPage> {
                                   _txtPasswordController.clear();
                                   MotionToast.error(
                                     title: Text("Error"),
-                                    description:
-                                        Text("NIC No or Password Incorrect"),
+                                    description: Text(
+                                      errorMessage ??
+                                          "NIC No or Password Incorrect",
+                                    ),
                                     animationType: AnimationType.slideInFromLeft,
                                     toastAlignment: Alignment.topCenter,
                                   ).show(context);
-
-                                  // EasyLoading.showError(
-                                  //     "NIC No or Password Incorrect");
                                 }
                               }
                             },
@@ -252,26 +262,4 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Future<bool?> _login(String nic, String password) async {
-    final databaseRef = FirebaseDatabase.instance.ref();
-
-    try {
-      var response =
-          databaseRef.child('/PublicUsers/All/').child(nic).child('Password');
-      DatabaseEvent event = await response.once();
-      print(event.snapshot.value);
-      print("/////////////////////////////////");
-
-      if (password == event.snapshot.value) {
-        print("Account Validation Done");
-        return true;
-      } else {
-        print("Account Validation Fail");
-        return false;
-      }
-    } catch (e) {
-      print(e);
-      return false;
-    }
-  }
 }

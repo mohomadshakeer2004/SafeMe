@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:safe_me/Resources/colors.dart';
 import 'package:safe_me/Screens/Login/languageSelect.dart';
+import 'package:safe_me/service/userService.dart';
 
-import 'Login/LoginPage.dart';
- import 'home_base.dart';
+import 'home_base.dart';
 
 class Loading extends StatefulWidget {
   const Loading({Key? key}) : super(key: key);
@@ -14,6 +14,8 @@ class Loading extends StatefulWidget {
 }
 
 class _LoadingState extends State<Loading> {
+  final UserService _userService = UserService();
+
   void loaded() async {
     await Future.delayed(const Duration(seconds: 5), () async {
       await checkSession();
@@ -21,7 +23,7 @@ class _LoadingState extends State<Loading> {
   }
 
   checkSession() async {
-    bool userSession = false; //await _userService.checkSession();
+    bool userSession = await _userService.checkSession();
     print(userSession);
     if (userSession) {
       Navigator.of(context)
