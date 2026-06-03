@@ -73,10 +73,52 @@ class _ComplaintHomeState extends State<ComplaintHome> {
   }
 
   void _onRefresh() async {
-    print("REFRESH STARTED");
     await getComplaintData();
     _refreshController.refreshCompleted();
-    print("REFRESH STOPPED");
+  }
+
+  Future<void> _confirmAndDeleteComplaint(int index, {bool confirm = true}) async {
+    if (index < 0 || index >= myComplaints.length) return;
+    final cid = '${myComplaints[index]['CID']}';
+
+    if (confirm) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete complaint?'),
+          content: Text('Remove complaint CID-$cid?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    final removed = myComplaints[index];
+    setState(() {
+      myComplaints.removeWhere((e) => '${e['CID']}' == cid);
+    });
+
+    EasyLoading.show(status: 'Deleting...');
+    try {
+      await FirebaseService.instance.deleteComplaint(cid);
+    } catch (e) {
+      debugPrint('Delete complaint failed: $e');
+      if (mounted) {
+        setState(() => myComplaints.insert(index, removed));
+      }
+      EasyLoading.showError('Delete failed');
+    } finally {
+      EasyLoading.dismiss();
+    }
   }
 
   List<Widget> indicators(imagesLength, currentIndex) {
@@ -233,16 +275,21 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                   child: Column(
                                     children: [
                                       Slidable(
-                                        key: const ValueKey(0),
+                                        key: ValueKey(
+                                            'complaint_${myComplaints[i]['CID']}'),
                                         endActionPane: ActionPane(
                                           motion: BehindMotion(),
                                           dismissible: DismissiblePane(
-                                              onDismissed: () {}),
+                                            onDismissed: () =>
+                                                _confirmAndDeleteComplaint(
+                                              i,
+                                              confirm: false,
+                                            ),
+                                          ),
                                           children: [
                                             SlidableAction(
-                                              onPressed: (ctx) {
-                                                print("Delete Complaint");
-                                              },
+                                              onPressed: (ctx) =>
+                                                  _confirmAndDeleteComplaint(i),
                                               backgroundColor:
                                                   Color(0xff0c213a),
                                               foregroundColor: Colors.white,

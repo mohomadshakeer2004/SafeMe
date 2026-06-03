@@ -1,9 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:camera/camera.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:safe_me/service/firebase_service.dart';
 import 'package:safe_me/service/userService.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:rflutter_alert/rflutter_alert.dart';
+import 'package:safe_me/util/date_parse_util.dart';
 import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../widgets/drawer.dart';
@@ -33,7 +32,7 @@ class _SafeMeBaseState extends State<SafeMeBase> {
   RefreshController _refreshController =
       RefreshController(initialRefresh: false);
 
-  Map<String, dynamic> safeMeData = {};
+  List<Map<String, dynamic>> mySafeMeAlerts = [];
 
   List<Widget> indicators(imagesLength, currentIndex) {
     return List<Widget>.generate(imagesLength, (index) {
@@ -52,24 +51,37 @@ class _SafeMeBaseState extends State<SafeMeBase> {
   PageController _pageController =
       PageController(viewportFraction: 1, initialPage: 0);
 
-  getSafeMeData() async {
-    final nic = await UserService().requireLoggedInNic();
-    if (nic == null) return;
-    EasyLoading.show(status: "Getting Complaint Data");
-    final databaseRef = FirebaseService.instance.rootRef;
+  Future<void> getSafeMeData() async {
+    EasyLoading.show(status: "Getting SafeMe Data");
+    try {
+      final sessionOk = await UserService().checkSession();
+      if (!sessionOk) {
+        if (mounted) setState(() => mySafeMeAlerts = []);
+        return;
+      }
 
-    var get_UserData = databaseRef.child('/SafeMe/All');
-    DatabaseEvent event = await get_UserData.once();
+      final nic = await UserService().getLoggedInNic();
+      if (nic == null || nic.isEmpty) {
+        if (mounted) setState(() => mySafeMeAlerts = []);
+        return;
+      }
 
-    Map<String, dynamic> data =
-        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
-    setState(() {
-      safeMeData = data;
-    });
+      final items =
+          await FirebaseService.instance.fetchMySafeMeAlerts(nic);
 
-    print(
-        "************ SafeMe Data = ${safeMeData.values.toList()}**************");
-    EasyLoading.dismiss();
+      if (!mounted) return;
+      setState(() {
+        mySafeMeAlerts = items;
+      });
+
+      debugPrint(
+          '************ My SafeMe (${nic}): ${mySafeMeAlerts.length} **************');
+    } catch (e) {
+      debugPrint('Failed to load SafeMe alerts: $e');
+      if (mounted) setState(() => mySafeMeAlerts = []);
+    } finally {
+      EasyLoading.dismiss();
+    }
   }
 
   getCamera() async {
@@ -78,10 +90,52 @@ class _SafeMeBaseState extends State<SafeMeBase> {
   }
 
   void _onRefresh() async {
-    print("REFRESH STARTED");
-    getSafeMeData();
+    await getSafeMeData();
     _refreshController.refreshCompleted();
-    print("REFRESH STOPPED");
+  }
+
+  Future<void> _confirmAndDeleteAlert(int index, {bool confirm = true}) async {
+    if (index < 0 || index >= mySafeMeAlerts.length) return;
+    final sid = '${mySafeMeAlerts[index]['SID']}';
+
+    if (confirm) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete alert?'),
+          content: Text('Remove SafeMe alert SID-$sid?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    final removed = mySafeMeAlerts[index];
+    setState(() {
+      mySafeMeAlerts.removeWhere((e) => '${e['SID']}' == sid);
+    });
+
+    EasyLoading.show(status: 'Deleting...');
+    try {
+      await FirebaseService.instance.deleteSafeMeAlert(sid);
+    } catch (e) {
+      debugPrint('Delete SafeMe failed: $e');
+      if (mounted) {
+        setState(() => mySafeMeAlerts.insert(index, removed));
+      }
+      EasyLoading.showError('Delete failed');
+    } finally {
+      EasyLoading.dismiss();
+    }
   }
 
   @override
@@ -228,29 +282,34 @@ class _SafeMeBaseState extends State<SafeMeBase> {
 
                 child: LayoutBuilder(builder:
                     (BuildContext context, BoxConstraints constraints) {
-                  return safeMeData.length > 0
+                  return mySafeMeAlerts.isNotEmpty
                       ? Container(
                           width: sysWidth,
                           height: constraints.maxHeight,
                           child: SingleChildScrollView(
                             child: Column(
                               children: [
-                                for (var i = 0; i < safeMeData.length; i++)
+                                for (var i = 0; i < mySafeMeAlerts.length; i++)
                                   Padding(
                                     padding: const EdgeInsets.all(8.0),
                                     child: Column(
                                       children: [
                                         Slidable(
-                                          key: const ValueKey(0),
+                                          key: ValueKey(
+                                              'safeme_${mySafeMeAlerts[i]['SID']}'),
                                           endActionPane: ActionPane(
                                             motion: BehindMotion(),
                                             dismissible: DismissiblePane(
-                                                onDismissed: () {}),
+                                              onDismissed: () =>
+                                                  _confirmAndDeleteAlert(
+                                                i,
+                                                confirm: false,
+                                              ),
+                                            ),
                                             children: [
                                               SlidableAction(
-                                                onPressed: (ctx) {
-                                                  print("Delete Complaint");
-                                                },
+                                                onPressed: (ctx) =>
+                                                    _confirmAndDeleteAlert(i),
                                                 backgroundColor:
                                                     Color(0xff0c213a),
                                                 foregroundColor: Colors.white,
@@ -292,7 +351,7 @@ class _SafeMeBaseState extends State<SafeMeBase> {
                                                         child: RotatedBox(
                                                           quarterTurns: 3,
                                                           child: Text(
-                                                            "CID-${(safeMeData.values.toList())[i]['SID']}",
+                                                            "CID-${mySafeMeAlerts[i]['SID']}",
                                                             style: TextStyle(
                                                               fontSize: 15,
                                                               fontWeight:
@@ -360,11 +419,11 @@ class _SafeMeBaseState extends State<SafeMeBase> {
                                                                               pagePosition) {
                                                                         var images =
                                                                             [
-                                                                          "${(safeMeData.values.toList())[i]['Image1']}",
-                                                                          "${(safeMeData.values.toList())[i]['Image2']}",
-                                                                          "${(safeMeData.values.toList())[i]['Image3']}",
-                                                                          "${(safeMeData.values.toList())[i]['Image4']}",
-                                                                          "${(safeMeData.values.toList())[i]['Image5']}",
+                                                                          "${mySafeMeAlerts[i]['Image1']}",
+                                                                          "${mySafeMeAlerts[i]['Image2']}",
+                                                                          "${mySafeMeAlerts[i]['Image3']}",
+                                                                          "${mySafeMeAlerts[i]['Image4']}",
+                                                                          "${mySafeMeAlerts[i]['Image5']}",
                                                                         ];
                                                                         return Container(
                                                                           child: images.isNotEmpty
@@ -443,7 +502,7 @@ class _SafeMeBaseState extends State<SafeMeBase> {
                                                                 ),
                                                                 Flexible(
                                                                   child: Text(
-                                                                    "${(safeMeData.values.toList())[i]['City']}",
+                                                                    "${mySafeMeAlerts[i]['City']}",
                                                                     style:
                                                                         TextStyle(
                                                                       fontSize:
@@ -476,7 +535,7 @@ class _SafeMeBaseState extends State<SafeMeBase> {
                                                                   ),
                                                                 ),
                                                                 Text(
-                                                                  "${(safeMeData.values.toList())[i]['District']}",
+                                                                  "${mySafeMeAlerts[i]['District']}",
                                                                   style:
                                                                       TextStyle(
                                                                     fontSize:
@@ -513,17 +572,14 @@ class _SafeMeBaseState extends State<SafeMeBase> {
                                                                           .start,
                                                                   children: [
                                                                     Text(
-                                                                      DateFormat(
-                                                                              'yyyy-MM-dd')
-                                                                          .format(
-                                                                              DateTime.parse(
-                                                                        "${(safeMeData.values.toList())[i]['Date']}",
-                                                                      )),
+                                                                      formatStoredDate(
+                                                                        mySafeMeAlerts[i]['Date'],
+                                                                        pattern: 'yyyy-MM-dd',
+                                                                      ),
                                                                       style:
                                                                           TextStyle(
                                                                         fontSize:
                                                                             15,
-                                                                        // fontWeight: FontWeight.bold,
                                                                         color:
                                                                             textBlackColor,
                                                                         fontFamily:
@@ -552,7 +608,7 @@ class _SafeMeBaseState extends State<SafeMeBase> {
                                                                   ),
                                                                 ),
                                                                 Text(
-                                                                  "${(safeMeData.values.toList())[i]['Status']}",
+                                                                  "${mySafeMeAlerts[i]['Status']}",
                                                                   style:
                                                                       TextStyle(
                                                                     fontSize:

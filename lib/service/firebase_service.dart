@@ -158,4 +158,66 @@ class FirebaseService {
 
     return items;
   }
+
+  /// SafeMe alerts for the logged-in user.
+  Future<List<Map<String, dynamic>>> fetchMySafeMeAlerts(String nic) async {
+    await ensureAuthenticatedForWrite();
+
+    final snapshot = await rootRef
+        .child('SafeMe/All')
+        .get()
+        .timeout(rtdbTimeout);
+
+    if (!snapshot.exists || snapshot.value == null) {
+      return [];
+    }
+
+    final nicKey = nic.trim().toUpperCase();
+    final items = <Map<String, dynamic>>[];
+
+    void addEntry(dynamic value) {
+      if (value is! Map) return;
+      final entry = Map<String, dynamic>.from(
+        value.map((k, v) => MapEntry(k.toString(), v)),
+      );
+      final entryNic = entry['NIC']?.toString().trim().toUpperCase() ?? '';
+      if (entryNic != nicKey) return;
+      items.add(entry);
+    }
+
+    final raw = snapshot.value;
+    if (raw is Map) {
+      for (final value in raw.values) {
+        addEntry(value);
+      }
+    } else if (raw is List) {
+      for (final value in raw) {
+        addEntry(value);
+      }
+    }
+
+    items.sort((a, b) {
+      final aSid = int.tryParse('${a['SID']}') ?? 0;
+      final bSid = int.tryParse('${b['SID']}') ?? 0;
+      return bSid.compareTo(aSid);
+    });
+
+    return items;
+  }
+
+  Future<void> deleteSafeMeAlert(String sid) async {
+    await ensureAuthenticatedForWrite();
+    await rootRef
+        .child('SafeMe/All/$sid')
+        .remove()
+        .timeout(rtdbTimeout);
+  }
+
+  Future<void> deleteComplaint(String cid) async {
+    await ensureAuthenticatedForWrite();
+    await rootRef
+        .child('Complaints/All/$cid')
+        .remove()
+        .timeout(rtdbTimeout);
+  }
 }

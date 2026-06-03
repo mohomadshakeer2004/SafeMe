@@ -17,6 +17,7 @@ import 'package:safe_me/util/user_data_util.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:motion_toast/motion_toast.dart';
 import 'package:motion_toast/resources/arrays.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:safe_me/Screens/SafeMe/safeMeBase.dart';
@@ -41,8 +42,11 @@ class _SafeMeFormState extends State<SafeMeForm> {
   File? _file1, _file2, _file3, _file4, _file5;
   bool LostAndFound = false;
   bool isAgree = false;
-  FlutterSoundRecorder recorder = FlutterSoundRecorder();
+  final FlutterSoundRecorder recorder = FlutterSoundRecorder();
   bool isRecorderReady = false;
+  bool isRecording = false;
+  File? _audioFile;
+  String? _audioRecordPath;
 
   Map<String, dynamic> userData = {};
 
@@ -95,18 +99,47 @@ class _SafeMeFormState extends State<SafeMeForm> {
     });
   }
 
-  Future record() async {
-    if (!isRecorderReady) return;
-    await recorder.startRecorder(toFile: 'audio');
+  Future<void> record() async {
+    if (!isRecorderReady || isRecording) return;
+    try {
+      final dir = await getTemporaryDirectory();
+      _audioRecordPath =
+          '${dir.path}/safeme_${DateTime.now().millisecondsSinceEpoch}.aac';
+      await recorder.startRecorder(
+        toFile: _audioRecordPath,
+        codec: Codec.aacADTS,
+      );
+      if (!mounted) return;
+      setState(() {
+        isRecording = true;
+        _audioFile = null;
+      });
+    } catch (e) {
+      debugPrint('Start recording failed: $e');
+    }
   }
 
-  Future stop() async {
-    if (!isRecorderReady) return;
+  Future<void> stop() async {
+    if (!isRecorderReady || !isRecording) return;
+    try {
+      final recordedPath = await recorder.stopRecorder();
+      if (!mounted) return;
+      setState(() => isRecording = false);
 
-    final recodePath = await recorder.stopRecorder();
-    final audioFile = File(recodePath!);
+      final path = recordedPath ?? _audioRecordPath;
+      if (path == null || path.isEmpty) return;
 
-    print('*************Audio File Path = $audioFile');
+      final audioFile = File(path);
+      if (!await audioFile.exists()) {
+        debugPrint('Audio file missing at $path');
+        return;
+      }
+      setState(() => _audioFile = audioFile);
+      debugPrint('Audio saved: $path (${await audioFile.length()} bytes)');
+    } catch (e) {
+      debugPrint('Stop recording failed: $e');
+      if (mounted) setState(() => isRecording = false);
+    }
   }
 
   final GlobalKey<FormBuilderState> _fbKey = GlobalKey<FormBuilderState>();
@@ -128,46 +161,59 @@ class _SafeMeFormState extends State<SafeMeForm> {
   String selectType = '';
   DateTime selectDate = DateTime.now();
 
-  getCurrLocation() async {
-    EasyLoading.show(status: "Getting Your Location");
-    Position positionCur = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
-    print("///////////////////////$positionCur//////////////////////////");
-    EasyLoading.dismiss();
-    setState(() {
-      _position = positionCur;
-      _txtLocation.text =
-          "${positionCur.latitude.toStringAsFixed(7)} , ${positionCur.longitude.toStringAsFixed(7)}";
-    });
+  Future<void> getCurrLocation() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      final positionCur = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      if (!mounted) return;
+      setState(() {
+        _position = positionCur;
+        _txtLocation.text =
+            "${positionCur.latitude.toStringAsFixed(7)} , ${positionCur.longitude.toStringAsFixed(7)}";
+      });
+    } catch (e) {
+      debugPrint('Location unavailable: $e');
+    }
   }
 
   final _txtDescriptionController = TextEditingController();
 
-  getUserData() async {
-    final nic = await UserService().requireLoggedInNic();
-    if (nic == null) return;
+  Future<void> getUserData() async {
     EasyLoading.show(status: "Getting User Data");
-    final databaseRef = FirebaseService.instance.rootRef;
+    try {
+      final sessionOk = await UserService().checkSession();
+      if (!sessionOk) return;
 
-    var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
-    DatabaseEvent event = await get_UserData.once();
+      final nic = await UserService().getLoggedInNic();
+      if (nic == null || nic.isEmpty) return;
 
-    if (event.snapshot.value == null) {
+      final snapshot = await FirebaseService.instance.getPublicUser(nic);
+      if (!snapshot.exists || snapshot.value == null) return;
+
+      final data = UserDataUtil.withDefaults(
+        jsonDecode(jsonEncode(snapshot.value)) as Map<String, dynamic>,
+        nic,
+      );
+      if (!mounted) return;
+      setState(() => userData = data);
+    } catch (e) {
+      debugPrint('Failed to load user data: $e');
+    } finally {
       EasyLoading.dismiss();
-      return;
     }
-
-    Map<String, dynamic> data = UserDataUtil.withDefaults(
-      jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>,
-      nic,
-    );
-    setState(() {
-      userData = data;
-    });
-
-    print("************ User Data = ${data}**************");
-    print("************  User Email = ${data['Email']}**************");
-    EasyLoading.dismiss();
   }
 
   Future initRecorder() async {
@@ -176,10 +222,11 @@ class _SafeMeFormState extends State<SafeMeForm> {
       if (status != PermissionStatus.granted) return;
 
       await recorder.openRecorder();
-      isRecorderReady = true;
-      recorder.setSubscriptionDuration(
+      await recorder.setSubscriptionDuration(
         const Duration(milliseconds: 500),
       );
+      if (!mounted) return;
+      setState(() => isRecorderReady = true);
     } catch (e) {
       debugPrint('Recorder init failed: $e');
     }
@@ -196,6 +243,9 @@ class _SafeMeFormState extends State<SafeMeForm> {
   @override
   void dispose() {
     if (isRecorderReady) {
+      if (isRecording) {
+        recorder.stopRecorder();
+      }
       recorder.closeRecorder();
     }
     super.dispose();
@@ -476,19 +526,19 @@ class _SafeMeFormState extends State<SafeMeForm> {
                     children: [
                       ElevatedButton(
                         onPressed: () async {
-                          if (recorder.isRecording) {
+                          if (isRecording) {
                             await stop();
                           } else {
                             await record();
                           }
                         },
                         child: Icon(
-                          recorder.isRecording ? Icons.stop : Icons.mic,
+                          isRecording ? Icons.stop : Icons.mic,
                         ),
                       ),
                       SizedBox(width: 10),
                       StreamBuilder<RecordingDisposition>(
-                        stream: recorder.onProgress,
+                        stream: isRecorderReady ? recorder.onProgress : null,
                         builder: (context, snapshot) {
                           final duration = snapshot.hasData
                               ? snapshot.data!.duration
@@ -496,6 +546,16 @@ class _SafeMeFormState extends State<SafeMeForm> {
                           return Text("${duration.inSeconds} s");
                         },
                       ),
+                      if (_audioFile != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Audio ready',
+                          style: TextStyle(
+                            color: secondary,
+                            fontFamily: 'Poppins-Light',
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   SizedBox(width: 10),
@@ -508,6 +568,9 @@ class _SafeMeFormState extends State<SafeMeForm> {
                               if (_fbKey.currentState!.saveAndValidate() &&
                                   _file1 != null &&
                                   _file2 != null) {
+                                if (isRecording) {
+                                  await stop();
+                                }
                                 final formData = _fbKey.currentState!.value;
                                 final district =
                                     formData['district'] as String? ?? '';
@@ -742,11 +805,11 @@ class _SafeMeFormState extends State<SafeMeForm> {
       await firebase.ensureAuthenticatedForWrite();
       final databaseRef = firebase.rootRef;
 
-      final sidEvent = await databaseRef
-          .child("/SafeMe/LastSID")
-          .once()
+      final sidSnap = await databaseRef
+          .child('SafeMe/LastSID')
+          .get()
           .timeout(timeout);
-      var sid = int.tryParse('${sidEvent.snapshot.value}') ?? 0;
+      var sid = int.tryParse('${sidSnap.value}') ?? 0;
       sid++;
 
       print("************ SafeMe ID = $sid**************");
@@ -814,6 +877,9 @@ class _SafeMeFormState extends State<SafeMeForm> {
         Image4,
         Image5,
       );
+      if (_audioFile != null) {
+        _uploadSafeMeAudio(databaseRef, sid, _audioFile!);
+      }
 
       return true;
     } catch (e) {
@@ -853,6 +919,27 @@ class _SafeMeFormState extends State<SafeMeForm> {
           .timeout(FirebaseService.rtdbTimeout);
     } catch (e) {
       print('SafeMe image upload failed: $e');
+    }
+  }
+
+  Future<void> _uploadSafeMeAudio(
+    DatabaseReference databaseRef,
+    int sid,
+    File audioFile,
+  ) async {
+    try {
+      final url = await StorageService.uploadFile(
+        storagePath: 'safeme audio/$sid',
+        file: audioFile,
+      );
+      if (url == null) return;
+
+      await databaseRef
+          .child('SafeMe/All/$sid')
+          .update({'AudioMP3': url})
+          .timeout(FirebaseService.rtdbTimeout);
+    } catch (e) {
+      debugPrint('SafeMe audio upload failed: $e');
     }
   }
 }
