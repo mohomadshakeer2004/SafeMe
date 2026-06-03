@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:safe_me/service/firebase_service.dart';
 import 'package:safe_me/service/userService.dart';
 import 'package:safe_me/util/user_data_util.dart';
@@ -11,6 +12,8 @@ import 'package:safe_me/Screens/home_base.dart';
 import '../Resources/colors.dart';
 
 import '../Resources/style.dart';
+import '../content/legal_content.dart';
+import '../Screens/Legal/legal_document_screen.dart';
 import '../Screens/Login/languageSelect.dart';
 
 class DrawerWidget extends StatefulWidget {
@@ -166,19 +169,31 @@ class _DrawerWidgetState extends State<DrawerWidget> {
                     ListTile(
                       leading: Icon(FontAwesomeIcons.fileAlt, color: secondary),
                       title: Text(
-                        "Terms and Condition",
+                        "Terms_and_Conditions_Menu".tr(),
                         style: normalWhiteTextStyle,
                       ),
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.pop(context);
+                        LegalDocumentScreen.open(
+                          context,
+                          LegalDocumentType.terms,
+                        );
+                      },
                     ),
                     ListTile(
                       leading:
                           Icon(FontAwesomeIcons.shieldHalved, color: secondary),
                       title: Text(
-                        "Privacy Policy",
+                        "Privacy_Policy_Menu".tr(),
                         style: normalWhiteTextStyle,
                       ),
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.pop(context);
+                        LegalDocumentScreen.open(
+                          context,
+                          LegalDocumentType.privacy,
+                        );
+                      },
                     ),
                   ]),
                 ),

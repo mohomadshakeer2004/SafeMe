@@ -23,6 +23,7 @@ import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
 import '../../widgets/drawer.dart';
+import '../../widgets/legal_acceptance_title.dart';
 import '../../widgets/safe_date_field.dart';
 import '../home_base.dart';
 
@@ -377,10 +378,7 @@ class _LostFoundItemState extends State<LostFoundItem> {
                     initialValue: false,
                     activeColor: secondary,
                     // onChanged: _onChanged,
-                    title: Text(
-                      "Terms_Conditions".tr(),
-                      style: TextStyle(color: textBlackColor),
-                    ),
+                    title: const LegalAcceptanceTitle(),
                   ),
                   SizedBox(height: 15),
                   Row(
