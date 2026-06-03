@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:safe_me/Controller/language_controller.dart';
 import 'package:provider/provider.dart';
+import 'package:safe_me/service/emergency_audio_service.dart';
 import 'package:safe_me/Screens/home_base.dart';
 import 'Screens/Appoinment/appoinmentForm.dart';
 import 'Screens/Appoinment/appointment_base.dart';
@@ -19,6 +20,7 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await EasyLocalization.ensureInitialized();
+  await EmergencyAudioService.instance.init();
    //SystemChrome.setEnabledSystemUIOverlays([]);
    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(

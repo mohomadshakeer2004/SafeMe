@@ -1,19 +1,22 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:safe_me/service/firebase_service.dart';
+import 'package:safe_me/service/storage_service.dart';
+import 'package:safe_me/service/userService.dart';
+import 'package:safe_me/util/user_data_util.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:motion_toast/motion_toast.dart';
 import 'package:motion_toast/resources/arrays.dart';
 import 'package:provider/provider.dart';
-import 'package:video_player/video_player.dart';
 
 import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
@@ -35,7 +38,7 @@ class _LostFoundItemState extends State<LostFoundItem> {
   File? _file2;
   bool LostAndFound = false;
   bool isAgree = false;
-  late VideoPlayerController _videoPlayerController;
+  Map<String, dynamic> userData = {};
   Position _position = Position(
       longitude: 0,
       latitude: 0,
@@ -88,21 +91,67 @@ class _LostFoundItemState extends State<LostFoundItem> {
   var city = ['Gampaha','Veyangoda','Minuwangoda', 'Nittabuwa', 'Aththnagalla','Kaduwela','Kolonnawa', 'Maharagama','Kesbewa','Nugegoda','Ahangama', 'Ambalangoda' ,'Balapitiya' ];
 
 
-  late String selectDistrict;
-  late String selectCity;
-  late DateTime selectDate;
+  String selectDistrict = '';
+  String selectCity = '';
+  DateTime selectDate = DateTime.now();
 
   getCurrLocation() async {
-    EasyLoading.show(status: "Getting Your Location");
-    Position positionCur = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
-    print("///////////////////////$positionCur//////////////////////////");
-    EasyLoading.dismiss();
-    setState(() {
-      _position = positionCur;
-      _txtLocation.text =
-          "${positionCur.latitude.toStringAsFixed(7)} , ${positionCur.longitude.toStringAsFixed(7)}";
-    });
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      final positionCur = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      if (!mounted) return;
+      setState(() {
+        _position = positionCur;
+        _txtLocation.text =
+            "${positionCur.latitude.toStringAsFixed(7)} , ${positionCur.longitude.toStringAsFixed(7)}";
+      });
+    } catch (e) {
+      debugPrint('Location unavailable: $e');
+    }
+  }
+
+  getUserData() async {
+    final nic = await UserService().requireLoggedInNic();
+    if (nic == null) return;
+    EasyLoading.show(status: "Getting User Data");
+    try {
+      final databaseRef = FirebaseService.instance.rootRef;
+      final event =
+          await databaseRef.child('/PublicUsers/All/').child(nic).once();
+
+      if (event.snapshot.value == null) return;
+
+      final data = UserDataUtil.withDefaults(
+        jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>,
+        nic,
+      );
+      if (!mounted) return;
+      setState(() {
+        userData = data;
+      });
+    } catch (e) {
+      debugPrint('Failed to load user data: $e');
+    } finally {
+      EasyLoading.dismiss();
+    }
+  }
+
+  Future<void> _initScreen() async {
+    await getUserData();
+    await getCurrLocation();
   }
 
   final _txtDescriptionController = TextEditingController();
@@ -113,7 +162,7 @@ class _LostFoundItemState extends State<LostFoundItem> {
   @override
   void initState() {
     super.initState();
-    getCurrLocation();
+    _initScreen();
   }
 
   @override
@@ -353,50 +402,54 @@ class _LostFoundItemState extends State<LostFoundItem> {
                       InkWell(
                           onTap: () async {
                             try {
-                              if (_fbKey.currentState!.validate() &&
+                              if (_fbKey.currentState!.saveAndValidate() &&
                                   _file1 != null &&
                                   _file2 != null) {
-                                if (isAgree == true) {
+                                final formData = _fbKey.currentState!.value;
+                                final agreed = formData['accept_terms'] == true;
+                                if (agreed) {
+                                  final district =
+                                      formData['district'] as String? ?? '';
+                                  final city =
+                                      formData['city'] as String? ?? '';
+                                  final date = formData['dateTime'] as DateTime? ??
+                                      selectDate;
+                                  final description =
+                                      formData['description'] as String? ??
+                                          _txtDescriptionController.text;
+
                                   EasyLoading.show(status: "Submitting...");
                                   print("******Validate******");
-                                  var result = await submitLostAndFound(
-                                      "Address",
-                                      selectCity,
-                                      selectDate,
-                                      _txtDescriptionController.text,
-                                      selectDistrict,
-                                      "Email",
-                                      _file1 as File,
-                                      //Image1,
-                                      _file2 as File,
-                                      //Image2,
+                                  bool result = false;
+                                  try {
+                                    result = await submitLostAndFound(
+                                      UserDataUtil.field(userData, 'Address'),
+                                      city,
+                                      date,
+                                      description,
+                                      district,
+                                      UserDataUtil.field(userData, 'Email'),
+                                      _file1!,
+                                      _file2!,
                                       _position.latitude,
                                       _position.longitude,
-                                      0779873552,
-                                      //Mobile,
-                                      "961240999V",
-                                      //NIC,
-                                      "Chanuka Anuruddha",
-                                      //Name,
-                                      ""
-                                      //ProfileImage,
-                                      );
+                                      UserDataUtil.mobileAsInt(userData),
+                                      UserDataUtil.field(userData, 'NIC'),
+                                      UserDataUtil.field(userData, 'Name'),
+                                      UserDataUtil.field(
+                                          userData, 'ProfileImage'),
+                                    );
+                                  } finally {
+                                    EasyLoading.dismiss();
+                                  }
 
-                                  if (result = true) {
-                                    // MotionToast.success(
-                                    //   toastDuration: Duration(seconds: 4),
-                                    //   title: Text("Success"),
-                                    //   description: Text("Complaint Submitted successfully!"),
-                                    //   animationType: AnimationType.slideInFromTop,
-                                    //   toastAlignment: Alignment.topCenter,
-                                    // ).show(context);
-
+                                  if (result) {
                                     EasyLoading.showSuccess(
                                         'Lost and Found Complaint Submitted successfully!',
                                         duration: Duration(seconds: 5));
                                     print(
                                         "******Complaint Submitted successfully!******");
-                                    // EasyLoading.dismiss();
+                                    if (!context.mounted) return;
                                     Navigator.pop(context);
                                     Navigator.pushAndRemoveUntil(
                                         context,
@@ -428,9 +481,9 @@ class _LostFoundItemState extends State<LostFoundItem> {
                               }
                             } catch (e) {
                               print(e);
-
+                              EasyLoading.dismiss();
                               print("******Not Validate******");
-                            } finally {}
+                            }
                           },
                           child: Container(
                             height: 50,
@@ -569,7 +622,7 @@ class _LostFoundItemState extends State<LostFoundItem> {
     );
   }
 
-  Future<bool?> submitLostAndFound(
+  Future<bool> submitLostAndFound(
     String Address,
     String City,
     DateTime Date,
@@ -585,95 +638,112 @@ class _LostFoundItemState extends State<LostFoundItem> {
     String Name,
     String ProfileImage,
   ) async {
-    final databaseRef = FirebaseDatabase.instance.ref();
-    FirebaseStorage storage = FirebaseStorage.instance;
+    final firebase = FirebaseService.instance;
+    final timeout = FirebaseService.rtdbTimeout;
 
-    ///Get Last Lost and Found ID -1st Step
+    try {
+      await firebase.ensureAuthenticatedForWrite();
+      final databaseRef = firebase.rootRef;
 
-    var get_CID = databaseRef.child("/Complaints/lastCID");
-    DatabaseEvent event = await get_CID.once();
-    int CID = (event.snapshot.value).hashCode + 1;
-    print("************ Lost and Found Complaint ID = $CID**************");
+      final cidEvent = await databaseRef
+          .child("/Complaints/lastCID")
+          .once()
+          .timeout(timeout);
+      var cid = int.tryParse('${cidEvent.snapshot.value}') ?? 0;
+      cid++;
 
-    if (CID != null) {
-      try {
-        print("************Get Complaint ID = $CID");
-        var data = {
-          "CID": CID,
-          "Address": Address,
-          "City": City,
-          "Date": Date.toString(),
-          "Description": Description,
-          "District": District,
-          "Email": Email,
-          "Image1": "",
-          "Image2": "",
-          "Latitude": Latitude,
-          "Longitude": Longitude,
-          "Mobile": Mobile,
-          "NIC": NIC,
-          "Name": Name,
-          "ProfileImage": ProfileImage,
-          "Reason": "",
-          "Status": "Pending",
-          "Type": "Lost And Found"
-        };
+      print("************ Lost and Found Complaint ID = $cid**************");
 
-        ///Save Complaint - 2nd Step
+      final data = {
+        "CID": cid,
+        "Address": Address,
+        "City": City,
+        "Date": Date.toString(),
+        "Description": Description,
+        "District": District,
+        "Email": Email,
+        "Image1": "",
+        "Image2": "",
+        "Latitude": Latitude,
+        "Longitude": Longitude,
+        "Mobile": Mobile,
+        "NIC": NIC,
+        "Name": Name,
+        "ProfileImage": ProfileImage,
+        "Reason": "",
+        "Status": "Pending",
+        "Type": "Lost And Found",
+      };
 
-        databaseRef.child("/Complaints/All/").child("$CID").set(data);
-        print("**************Save Lost and Found response ");
+      await databaseRef
+          .child("/Complaints/All/$cid")
+          .set(data)
+          .timeout(timeout);
+      print("**************Save Lost and Found response ");
 
-        /// update complaints image Url
+      await databaseRef
+          .child("/Complaints/lastCID")
+          .set(cid)
+          .timeout(timeout);
 
-        Reference ref_Im1 = storage.ref().child("/complaints/" + "$CID" "_1");
-        await ref_Im1.putFile(Image1);
-        Reference ref_Im2 = storage.ref().child("/complaints/" + "$CID" "_2");
-        await ref_Im2.putFile(Image2);
-        String image1Url = await ref_Im1.getDownloadURL();
-        String image2Url = await ref_Im2.getDownloadURL();
-        print("********Image_1 URL = $image1Url");
-        print("********Image_2 URL = $image2Url");
+      final countEvent = await databaseRef
+          .child("/Complaints/ComplaintCount")
+          .once()
+          .timeout(timeout);
+      final count = int.tryParse('${countEvent.snapshot.value}') ?? 0;
+      await databaseRef
+          .child("/Complaints/ComplaintCount")
+          .set(count + 1)
+          .timeout(timeout);
 
-        databaseRef
-            .child("/Complaints/All/$CID")
-            .update({'Image1': image1Url, 'Image2': image2Url});
+      final lfEvent = await databaseRef
+          .child("/Complaints/LostAndFoundCount")
+          .once()
+          .timeout(timeout);
+      final lfCount = int.tryParse('${lfEvent.snapshot.value}') ?? 0;
+      await databaseRef
+          .child("/Complaints/LostAndFoundCount")
+          .set(lfCount + 1)
+          .timeout(timeout);
 
-        ///Update Last Lost and Found Complaint ID
-        databaseRef.child("/Complaints/").update({'lastCID': CID});
+      _uploadComplaintImages(databaseRef, cid, Image1, Image2);
 
-        ///Update Lost and Found  Complaint Count
-        var getComplaintCount = databaseRef.child("/Complaints/ComplaintCount");
-        DatabaseEvent event = await getComplaintCount.once();
-        print(event.snapshot.value);
-        int Complaint_Count = (event.snapshot.value).hashCode + 1;
-        databaseRef
-            .child("/Complaints/")
-            .update({'ComplaintCount': Complaint_Count});
+      return true;
+    } catch (e) {
+      print('submitLostAndFound failed: $e');
+      return false;
+    }
+  }
 
-        ///Update Lost and Found Count
-        var getLostAndFoundCount =
-            databaseRef.child("/Complaints/LostAndFoundCount");
-        DatabaseEvent LFevent = await getLostAndFoundCount.once();
-        print(event.snapshot.value);
-        int LostAndFound_Count = (LFevent.snapshot.value).hashCode + 1;
-        databaseRef
-            .child("/Complaints/")
-            .update({'LostAndFoundCount': LostAndFound_Count});
+  Future<void> _uploadComplaintImages(
+    DatabaseReference databaseRef,
+    int cid,
+    File image1,
+    File image2,
+  ) async {
+    try {
+      final results = await Future.wait([
+        StorageService.uploadFile(
+          storagePath: "complaints/${cid}_1",
+          file: image1,
+        ),
+        StorageService.uploadFile(
+          storagePath: "complaints/${cid}_2",
+          file: image2,
+        ),
+      ]);
 
-        // MotionToast.success(
-        //   toastDuration: Duration(seconds: 4),
-        //   title: Text("Success"),
-        //   description: Text("Complaint Submitted successfully!"),
-        //   animationType: AnimationType.slideInFromTop,
-        //   toastAlignment: Alignment.topCenter,
-        // ).show(context);
+      final imageUpdates = <String, dynamic>{};
+      if (results[0] != null) imageUpdates['Image1'] = results[0];
+      if (results[1] != null) imageUpdates['Image2'] = results[1];
+      if (imageUpdates.isEmpty) return;
 
-        return true;
-      } catch (e) {
-        print(e);
-        return false;
-      }
+      await databaseRef
+          .child("/Complaints/All/$cid")
+          .update(imageUpdates)
+          .timeout(FirebaseService.rtdbTimeout);
+    } catch (e) {
+      print('Complaint image upload failed: $e');
     }
   }
 }

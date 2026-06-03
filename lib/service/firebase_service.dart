@@ -29,6 +29,14 @@ class FirebaseService {
 
   DatabaseReference get rootRef => database.ref();
 
+  /// One-shot read without an [EventChannel] stream (avoids hot-reload cancel errors).
+  Future<DataSnapshot> getOnce(DatabaseReference ref) => ref.get();
+
+  Future<DataSnapshot> getPublicUser(String nic) {
+    final nicKey = nic.trim().toUpperCase();
+    return rootRef.child('PublicUsers/All/$nicKey').get();
+  }
+
   /// Signs in with the shared admin account (not the user's RTDB password).
   Future<UserCredential> signInAsAdmin() {
     return FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -41,13 +49,8 @@ class FirebaseService {
   Future<bool> validateNicPassword(String nic, String password) async {
     final nicKey = nic.trim().toUpperCase();
 
-    final passwordRef = rootRef
-        .child('/PublicUsers/All/')
-        .child(nicKey)
-        .child('Password');
-
-    final DatabaseEvent event = await passwordRef.once();
-    final storedPassword = event.snapshot.value;
+    final storedPassword =
+        (await rootRef.child('PublicUsers/All/$nicKey/Password').get()).value;
 
     if (storedPassword == null) {
       return false;
@@ -82,6 +85,16 @@ class FirebaseService {
       await signOut();
       return false;
     }
+  }
+
+  static const Duration rtdbTimeout = Duration(seconds: 20);
+
+  /// Re-authenticates when the Firebase session expired (RTDB writes need auth).
+  Future<void> ensureAuthenticatedForWrite() async {
+    if (FirebaseAuth.instance.currentUser != null) {
+      return;
+    }
+    await signInAsAdmin();
   }
 
   Future<void> ensureAuthenticated() async {

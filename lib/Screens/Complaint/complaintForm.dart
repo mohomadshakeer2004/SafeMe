@@ -470,24 +470,29 @@ class _ComplaintFormState extends State<ComplaintForm> {
 
                                   EasyLoading.show(status: "Submitting...");
                                   print("******Validate******");
-                                  var result = await submitComplaint(
-                                      UserDataUtil.field(userData, 'Address'),
-                                      city,
-                                      date,
-                                      description,
-                                      district,
-                                      UserDataUtil.field(userData, 'Email'),
-                                      _file1 as File,
-                                      _file2 as File,
-                                      _position.latitude,
-                                      _position.longitude,
-                                      UserDataUtil.mobileAsInt(userData),
-                                      UserDataUtil.field(userData, 'NIC'),
-                                      UserDataUtil.field(userData, 'Name'),
-                                      UserDataUtil.field(userData, 'ProfileImage'),
-                                      type);
+                                  var result = false;
+                                  try {
+                                    result = await submitComplaint(
+                                        UserDataUtil.field(userData, 'Address'),
+                                        city,
+                                        date,
+                                        description,
+                                        district,
+                                        UserDataUtil.field(userData, 'Email'),
+                                        _file1 as File,
+                                        _file2 as File,
+                                        _position.latitude,
+                                        _position.longitude,
+                                        UserDataUtil.mobileAsInt(userData),
+                                        UserDataUtil.field(userData, 'NIC'),
+                                        UserDataUtil.field(userData, 'Name'),
+                                        UserDataUtil.field(
+                                            userData, 'ProfileImage'),
+                                        type);
+                                  } finally {
+                                    EasyLoading.dismiss();
+                                  }
 
-                                  EasyLoading.dismiss();
                                   if (result == true) {
                                     EasyLoading.showSuccess(
                                         'Submitted successfully!');
@@ -690,10 +695,17 @@ class _ComplaintFormState extends State<ComplaintForm> {
     String ProfileImage,
     String Type,
   ) async {
-    final databaseRef = FirebaseService.instance.rootRef;
+    final firebase = FirebaseService.instance;
+    final timeout = FirebaseService.rtdbTimeout;
 
     try {
-      final cidEvent = await databaseRef.child("/Complaints/lastCID").once();
+      await firebase.ensureAuthenticatedForWrite();
+      final databaseRef = firebase.rootRef;
+
+      final cidEvent = await databaseRef
+          .child("/Complaints/lastCID")
+          .once()
+          .timeout(timeout);
       var cid = int.tryParse('${cidEvent.snapshot.value}') ?? 0;
       cid++;
 
@@ -720,36 +732,65 @@ class _ComplaintFormState extends State<ComplaintForm> {
         "Type": Type,
       };
 
-      await databaseRef.child("/Complaints/All/$cid").set(data);
+      await databaseRef
+          .child("/Complaints/All/$cid")
+          .set(data)
+          .timeout(timeout);
       print("**************Save Complaint response ");
 
-      final image1Url = await StorageService.uploadFile(
-        storagePath: "complaints/${cid}_1",
-        file: Image1,
-      );
-      final image2Url = await StorageService.uploadFile(
-        storagePath: "complaints/${cid}_2",
-        file: Image2,
-      );
+      await databaseRef
+          .child("/Complaints/lastCID")
+          .set(cid)
+          .timeout(timeout);
 
-      final imageUpdates = <String, dynamic>{};
-      if (image1Url != null) imageUpdates['Image1'] = image1Url;
-      if (image2Url != null) imageUpdates['Image2'] = image2Url;
-      if (imageUpdates.isNotEmpty) {
-        await databaseRef.child("/Complaints/All/$cid").update(imageUpdates);
-      }
-
-      await databaseRef.child("/Complaints/lastCID").set(cid);
-
-      final countEvent =
-          await databaseRef.child("/Complaints/ComplaintCount").once();
+      final countEvent = await databaseRef
+          .child("/Complaints/ComplaintCount")
+          .once()
+          .timeout(timeout);
       final count = int.tryParse('${countEvent.snapshot.value}') ?? 0;
-      await databaseRef.child("/Complaints/ComplaintCount").set(count + 1);
+      await databaseRef
+          .child("/Complaints/ComplaintCount")
+          .set(count + 1)
+          .timeout(timeout);
+
+      _uploadComplaintImages(databaseRef, cid, Image1, Image2);
 
       return true;
     } catch (e) {
-      print(e);
+      print('submitComplaint failed: $e');
       return false;
+    }
+  }
+
+  Future<void> _uploadComplaintImages(
+    DatabaseReference databaseRef,
+    int cid,
+    File image1,
+    File image2,
+  ) async {
+    try {
+      final results = await Future.wait([
+        StorageService.uploadFile(
+          storagePath: "complaints/${cid}_1",
+          file: image1,
+        ),
+        StorageService.uploadFile(
+          storagePath: "complaints/${cid}_2",
+          file: image2,
+        ),
+      ]);
+
+      final imageUpdates = <String, dynamic>{};
+      if (results[0] != null) imageUpdates['Image1'] = results[0];
+      if (results[1] != null) imageUpdates['Image2'] = results[1];
+      if (imageUpdates.isEmpty) return;
+
+      await databaseRef
+          .child("/Complaints/All/$cid")
+          .update(imageUpdates)
+          .timeout(FirebaseService.rtdbTimeout);
+    } catch (e) {
+      print('Complaint image upload failed: $e');
     }
   }
 }

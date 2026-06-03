@@ -528,26 +528,31 @@ class _SafeMeFormState extends State<SafeMeForm> {
 
                                 EasyLoading.show(status: "Submitting...");
                                 print("******Validate******");
-                                var result = await submitSafeMe(
-                                    UserDataUtil.field(userData, 'Address'),
-                                    "",
-                                    city,
-                                    DateTime.now(),
-                                    district,
-                                    UserDataUtil.field(userData, 'Email'),
-                                    _file1!,
-                                    _file2!,
-                                    _file3,
-                                    _file4,
-                                    _file5,
-                                    _position.latitude,
-                                    _position.longitude,
-                                    UserDataUtil.mobileAsInt(userData),
-                                    UserDataUtil.field(userData, 'NIC'),
-                                    UserDataUtil.field(userData, 'Name'),
-                                    UserDataUtil.field(userData, 'ProfileImage'));
+                                var result = false;
+                                try {
+                                  result = await submitSafeMe(
+                                      UserDataUtil.field(userData, 'Address'),
+                                      "",
+                                      city,
+                                      DateTime.now(),
+                                      district,
+                                      UserDataUtil.field(userData, 'Email'),
+                                      _file1!,
+                                      _file2!,
+                                      _file3,
+                                      _file4,
+                                      _file5,
+                                      _position.latitude,
+                                      _position.longitude,
+                                      UserDataUtil.mobileAsInt(userData),
+                                      UserDataUtil.field(userData, 'NIC'),
+                                      UserDataUtil.field(userData, 'Name'),
+                                      UserDataUtil.field(
+                                          userData, 'ProfileImage'));
+                                } finally {
+                                  EasyLoading.dismiss();
+                                }
 
-                                EasyLoading.dismiss();
                                 if (result == true) {
                                   EasyLoading.showSuccess(
                                       'SafeMe Submitted successfully!');
@@ -742,10 +747,17 @@ class _SafeMeFormState extends State<SafeMeForm> {
     String Name,
     String ProfileImage,
   ) async {
-    final databaseRef = FirebaseService.instance.rootRef;
+    final firebase = FirebaseService.instance;
+    final timeout = FirebaseService.rtdbTimeout;
 
     try {
-      final sidEvent = await databaseRef.child("/SafeMe/LastSID").once();
+      await firebase.ensureAuthenticatedForWrite();
+      final databaseRef = firebase.rootRef;
+
+      final sidEvent = await databaseRef
+          .child("/SafeMe/LastSID")
+          .once()
+          .timeout(timeout);
       var sid = int.tryParse('${sidEvent.snapshot.value}') ?? 0;
       sid++;
 
@@ -774,47 +786,85 @@ class _SafeMeFormState extends State<SafeMeForm> {
         "Status": "Alert Sent",
       };
 
-      await databaseRef.child("/SafeMe/All/$sid").set(data);
+      await databaseRef
+          .child("/SafeMe/All/$sid")
+          .set(data)
+          .timeout(timeout);
       print("**************Save SafeMe response ");
 
-      final imageUpdates = <String, dynamic>{};
-      final uploads = <Future<void>>[];
+      await databaseRef
+          .child("/SafeMe/LastSID")
+          .set(sid)
+          .timeout(timeout);
 
-      Future<void> uploadOptional(int index, File? file) async {
-        if (file == null) return;
-        final url = await StorageService.uploadFile(
-          storagePath: "safeme images/${sid}_$index",
-          file: file,
-        );
-        if (url != null) imageUpdates['Image$index'] = url;
-      }
-
-      uploads.add(uploadOptional(1, Image1));
-      uploads.add(uploadOptional(2, Image2));
-      uploads.add(uploadOptional(3, Image3));
-      uploads.add(uploadOptional(4, Image4));
-      uploads.add(uploadOptional(5, Image5));
-      await Future.wait(uploads);
-
-      if (imageUpdates.isNotEmpty) {
-        await databaseRef.child("/SafeMe/All/$sid").update(imageUpdates);
-      }
-
-      await databaseRef.child("/SafeMe/LastSID").set(sid);
-
-      final pendingEvent =
-          await databaseRef.child("/SafeMe/PendingCount").once();
+      final pendingEvent = await databaseRef
+          .child("/SafeMe/PendingCount")
+          .once()
+          .timeout(timeout);
       final pending = int.tryParse('${pendingEvent.snapshot.value}') ?? 0;
-      await databaseRef.child("/SafeMe/PendingCount").set(pending + 1);
+      await databaseRef
+          .child("/SafeMe/PendingCount")
+          .set(pending + 1)
+          .timeout(timeout);
 
-      final totalEvent = await databaseRef.child("/SafeMe/TotalCount").once();
+      final totalEvent = await databaseRef
+          .child("/SafeMe/TotalCount")
+          .once()
+          .timeout(timeout);
       final total = int.tryParse('${totalEvent.snapshot.value}') ?? 0;
-      await databaseRef.child("/SafeMe/TotalCount").set(total + 1);
+      await databaseRef
+          .child("/SafeMe/TotalCount")
+          .set(total + 1)
+          .timeout(timeout);
+
+      _uploadSafeMeImages(
+        databaseRef,
+        sid,
+        Image1,
+        Image2,
+        Image3,
+        Image4,
+        Image5,
+      );
 
       return true;
     } catch (e) {
-      print(e);
+      print('submitSafeMe failed: $e');
       return false;
+    }
+  }
+
+  Future<void> _uploadSafeMeImages(
+    DatabaseReference databaseRef,
+    int sid,
+    File image1,
+    File image2,
+    File? image3,
+    File? image4,
+    File? image5,
+  ) async {
+    try {
+      final files = [image1, image2, image3, image4, image5];
+      final imageUpdates = <String, dynamic>{};
+
+      await Future.wait(List.generate(files.length, (index) async {
+        final file = files[index];
+        if (file == null) return;
+        final url = await StorageService.uploadFile(
+          storagePath: "safeme images/${sid}_${index + 1}",
+          file: file,
+        );
+        if (url != null) imageUpdates['Image${index + 1}'] = url;
+      }));
+
+      if (imageUpdates.isEmpty) return;
+
+      await databaseRef
+          .child("/SafeMe/All/$sid")
+          .update(imageUpdates)
+          .timeout(FirebaseService.rtdbTimeout);
+    } catch (e) {
+      print('SafeMe image upload failed: $e');
     }
   }
 }

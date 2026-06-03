@@ -58,9 +58,12 @@ class UserService {
       if (nic == null || nic.isEmpty) {
         return false;
       }
+      if (FirebaseAuth.instance.currentUser == null) {
+        await _firebase.signInAsAdmin();
+      }
       return FirebaseAuth.instance.currentUser != null;
     } catch (e) {
-      print(e);
+      print('checkSession failed: $e');
       return false;
     }
   }

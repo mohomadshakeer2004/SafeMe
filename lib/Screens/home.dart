@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -23,17 +22,17 @@ import '../widgets/drawer.dart';
 import 'Appoinment/appointment_base.dart';
 import 'Emergency/emergency.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:shake/shake.dart';
+import 'package:safe_me/service/home_shake_service.dart';
 import 'SafeMe/safeMeBase.dart';
 
 class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late int ShakeCount = 0;
-  final AudioPlayer _emergencyPlayer = AudioPlayer();
   String mytext = "Martini?";
   Map<String, dynamic> userData = {};
   Position _position = Position(
@@ -53,20 +52,18 @@ class _HomeScreenState extends State<HomeScreen> {
   getUserData() async {
     final nic = await UserService().requireLoggedInNic();
     if (nic == null) return;
-    final databaseRef = FirebaseService.instance.rootRef;
+    final snapshot = await FirebaseService.instance.getPublicUser(nic);
 
-    var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
-    DatabaseEvent event = await get_UserData.once();
-
-    if (event.snapshot.value == null) {
+    if (!snapshot.exists || snapshot.value == null) {
       EasyLoading.dismiss();
       return;
     }
 
     Map<String, dynamic> data = UserDataUtil.withDefaults(
-      jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>,
+      jsonDecode(jsonEncode(snapshot.value)) as Map<String, dynamic>,
       nic,
     );
+    if (!mounted) return;
     setState(() {
       userData = data;
     });
@@ -111,42 +108,44 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     getUserData();
     getCurrLocation();
-    _shakeDetector();
+    _bindShakeHandler();
   }
 
-  _shakeDetector() async {
-    ShakeDetector detector = ShakeDetector.autoStart(
-      onPhoneShake: (ShakeEvent event) {
-        setState(() {
-          ShakeCount++;
-          print("********$ShakeCount");
-        });
-
-        if (ShakeCount == 3) {
-          openPlayer();
-          print("*************************ShakeDetector Start*****************************");
-          submitSafeMe(
-              UserDataUtil.field(userData, 'Address'),
-              DateTime.now(),
-              UserDataUtil.field(userData, 'Email'),
-              _position.latitude,
-              _position.longitude,
-              UserDataUtil.mobileAsInt(userData),
-              UserDataUtil.field(userData, 'NIC'),
-              UserDataUtil.field(userData, 'Name'),
-              UserDataUtil.field(userData, 'ProfileImage'));
-        }
-      },
-    );
-    detector.startListening();
+  void _bindShakeHandler() {
+    HomeShakeService.instance.onTripleShake = _onTripleShake;
   }
 
-  void openPlayer() async {
-    await _emergencyPlayer.play(
-      UrlSource(
-        "https://firebasestorage.googleapis.com/v0/b/safeme-50a06.appspot.com/o/safeme%20audio%2FEmergency.mp3?alt=media&token=29495ee3-c021-46cd-83ad-769ae412f457",
-      ),
+  void _onTripleShake() {
+    if (!mounted) return;
+    print(
+        '*************************ShakeDetector Start*****************************');
+    submitSafeMe(
+      UserDataUtil.field(userData, 'Address'),
+      DateTime.now(),
+      UserDataUtil.field(userData, 'Email'),
+      _position.latitude,
+      _position.longitude,
+      UserDataUtil.mobileAsInt(userData),
+      UserDataUtil.field(userData, 'NIC'),
+      UserDataUtil.field(userData, 'Name'),
+      UserDataUtil.field(userData, 'ProfileImage'),
     );
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _bindShakeHandler();
+  }
+
+  @override
+  void dispose() {
+    final shake = HomeShakeService.instance;
+    if (shake.onTripleShake == _onTripleShake) {
+      shake.onTripleShake = null;
+    }
+    _txtLocation.dispose();
+    super.dispose();
   }
 
   @override

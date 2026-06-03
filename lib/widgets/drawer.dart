@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:firebase_database/firebase_database.dart';
 import 'package:safe_me/service/firebase_service.dart';
 import 'package:safe_me/service/userService.dart';
 import 'package:safe_me/util/user_data_util.dart';
@@ -26,20 +25,18 @@ class _DrawerWidgetState extends State<DrawerWidget> {
     final nic = await UserService().requireLoggedInNic();
     if (nic == null) return;
     EasyLoading.show(status: "Getting User Data");
-    final databaseRef = FirebaseService.instance.rootRef;
+    final snapshot = await FirebaseService.instance.getPublicUser(nic);
 
-    var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
-    DatabaseEvent event = await get_UserData.once();
-
-    if (event.snapshot.value == null) {
+    if (!snapshot.exists || snapshot.value == null) {
       EasyLoading.dismiss();
       return;
     }
 
     Map<String, dynamic> data = UserDataUtil.withDefaults(
-      jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>,
+      jsonDecode(jsonEncode(snapshot.value)) as Map<String, dynamic>,
       nic,
     );
+    if (!mounted) return;
     setState(() {
       userData = data;
     });

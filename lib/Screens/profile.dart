@@ -74,20 +74,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final nic = await UserService().requireLoggedInNic();
     if (nic == null) return;
     EasyLoading.show(status: "Getting User Data");
-    final databaseRef = FirebaseService.instance.rootRef;
+    final snapshot = await FirebaseService.instance.getPublicUser(nic);
 
-    var get_UserData = databaseRef.child('/PublicUsers/All/').child(nic);
-    DatabaseEvent event = await get_UserData.once();
-
-    if (event.snapshot.value == null) {
+    if (!snapshot.exists || snapshot.value == null) {
       EasyLoading.dismiss();
       return;
     }
 
     Map<String, dynamic> data = UserDataUtil.withDefaults(
-      jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>,
+      jsonDecode(jsonEncode(snapshot.value)) as Map<String, dynamic>,
       nic,
     );
+    if (!mounted) return;
     setState(() {
       userData = data;
 

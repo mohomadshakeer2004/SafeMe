@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:safe_me/Screens/notification.dart';
+import 'package:safe_me/service/emergency_audio_service.dart';
+import 'package:safe_me/service/home_shake_service.dart';
 import '../Resources/colors.dart';
-import '../widgets/drawer.dart';
 import 'home.dart';
 import 'profile.dart';
 
@@ -20,44 +19,62 @@ class _HomeBaseState extends State<HomeBase> {
   int selectedpage = 0;
 
   getUser() async {
-   // EasyLoading.show(status: "Loading Data...");
-    //  UserModel userModel = await Resources.getUser(_userService);
-     EasyLoading.dismiss();
-    setState(() {
-      //    Resources.user = userModel;
-    });
+    EasyLoading.dismiss();
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  void _syncShakeListener() {
+    if (selectedpage == 0) {
+      HomeShakeService.instance.start();
+    } else {
+      HomeShakeService.instance.stop();
+    }
   }
 
   void _onItemTapped(int index) {
     setState(() {
       selectedpage = index;
     });
+    _syncShakeListener();
   }
-
-  final _pageOptions = [
-    HomeScreen(),
-    // SubmissionsList(),
-  //  NotificationScreen(),
-    ProfileScreen(),
-  ];
 
   @override
   void initState() {
     super.initState();
     getUser();
+    _syncShakeListener();
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    HomeShakeService.instance.stop();
+    _syncShakeListener();
+  }
+
+  @override
+  void dispose() {
+    HomeShakeService.instance.stop();
+    EmergencyAudioService.instance.stop();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    late double sysWidth = MediaQuery.of(context).size.width / 100;
-    late double sysHeight = MediaQuery.of(context).size.height;
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: [],
     );
     return SafeArea(
       child: Scaffold(
-        body: _pageOptions[selectedpage],
+        body: IndexedStack(
+          index: selectedpage,
+          children: [
+            const HomeScreen(),
+            ProfileScreen(),
+          ],
+        ),
         backgroundColor: mainBGColor,
         bottomNavigationBar: BottomNavigationBar(
           items: const [
