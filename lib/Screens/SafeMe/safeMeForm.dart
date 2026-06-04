@@ -565,9 +565,7 @@ class _SafeMeFormState extends State<SafeMeForm> {
                       InkWell(
                           onTap: () async {
                             try {
-                              if (_fbKey.currentState!.saveAndValidate() &&
-                                  _file1 != null &&
-                                  _file2 != null) {
+                              if (_fbKey.currentState!.saveAndValidate()) {
                                 if (isRecording) {
                                   await stop();
                                 }
@@ -588,8 +586,8 @@ class _SafeMeFormState extends State<SafeMeForm> {
                                       DateTime.now(),
                                       district,
                                       UserDataUtil.field(userData, 'Email'),
-                                      _file1!,
-                                      _file2!,
+                                      _file1,
+                                      _file2,
                                       _file3,
                                       _file4,
                                       _file5,
@@ -629,9 +627,9 @@ class _SafeMeFormState extends State<SafeMeForm> {
                                 EasyLoading.dismiss();
                                 print("******Not Validate******");
                                 MotionToast.error(
-                                  title: Text("Error"),
-                                  description:
-                                      Text("Please Select Evidence Images"),
+                                  title: const Text("Error"),
+                                  description: const Text(
+                                      "Please complete all required fields"),
                                   animationType: AnimationType.slideInFromLeft,
                                   toastAlignment: Alignment.topCenter,
                                 ).show(context);
@@ -786,8 +784,8 @@ class _SafeMeFormState extends State<SafeMeForm> {
     DateTime Date,
     String District,
     String Email,
-    File Image1,
-    File Image2,
+    File? Image1,
+    File? Image2,
     File? Image3,
     File? Image4,
     File? Image5,
@@ -891,8 +889,8 @@ class _SafeMeFormState extends State<SafeMeForm> {
   Future<void> _uploadSafeMeImages(
     DatabaseReference databaseRef,
     int sid,
-    File image1,
-    File image2,
+    File? image1,
+    File? image2,
     File? image3,
     File? image4,
     File? image5,
