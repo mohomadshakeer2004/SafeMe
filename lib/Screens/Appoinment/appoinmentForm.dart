@@ -1,6 +1,7 @@
+import 'dart:convert';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
@@ -17,7 +18,9 @@ import '../../Resources/style.dart';
 import '../../widgets/drawer.dart';
 import '../../widgets/legal_acceptance_title.dart';
 import '../../widgets/safe_date_field.dart';
-import '../home_base.dart';
+import '../../service/firebase_service.dart';
+import '../../service/userService.dart';
+import '../../util/user_data_util.dart';
 import 'appointment_base.dart';
 
 class AppointmentForm extends StatefulWidget {
@@ -39,6 +42,7 @@ class _AppointmentFormState extends State<AppointmentForm> {
   bool isAgree = false;
 
   final _txtDescriptionController = TextEditingController();
+  Map<String, dynamic> userData = {};
 
   var AppointmentType = [
     'Minor Complaints',
@@ -49,6 +53,33 @@ class _AppointmentFormState extends State<AppointmentForm> {
     'Crime against women & children',
     'Other'
   ];
+
+  Future<void> getUserData() async {
+    final nic = await UserService().requireLoggedInNic();
+    if (nic == null) return;
+    try {
+      final snapshot = await FirebaseService.instance
+          .rootRef
+          .child('PublicUsers/All/$nic')
+          .get()
+          .timeout(FirebaseService.rtdbTimeout);
+      if (snapshot.value == null) return;
+      final data = UserDataUtil.withDefaults(
+        jsonDecode(jsonEncode(snapshot.value)) as Map<String, dynamic>,
+        nic,
+      );
+      if (!mounted) return;
+      setState(() => userData = data);
+    } catch (e) {
+      debugPrint('Failed to load user data: $e');
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    getUserData();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -235,35 +266,53 @@ class _AppointmentFormState extends State<AppointmentForm> {
                             try {
                               if (_fbKey.currentState!.validate()) {
                                 if (isAgree == true) {
+                                  final nic =
+                                      UserDataUtil.field(userData, 'NIC');
+                                  if (nic.isEmpty) {
+                                    MotionToast.error(
+                                      title: const Text("Error"),
+                                      description: const Text(
+                                          "User profile not loaded. Please try again."),
+                                      animationType:
+                                          AnimationType.slideInFromLeft,
+                                      toastAlignment: Alignment.topCenter,
+                                    ).show(context);
+                                    return;
+                                  }
                                   EasyLoading.show(status: "Submitting...");
                                   print("******Validate******");
 
-                                  var result = await submitAppointment(
-                                      "100, Pattalagedra, Veyangoda",
-                                      selectCity,
-                                      _txtDescriptionController.text,
-                                      selectDistrict,
-                                      "chanukadias2@yahoo.com",
-                                      0779873552,
-                                      "961240999V",
-                                      "Chanuka Dias",
-                                      "https://firebasestorage.googleapis.com/v0/b/safeme-50a06.appspot.com/o/public%20profile%20images%2F961240999V?alt=media&token=3732ed11-39fa-4bc4-af5a-74678af19174",//"ProfileImage",
-                                      selectDate,
-                                      selectType);
+                                  final result = await submitAppointment(
+                                    UserDataUtil.field(userData, 'Address'),
+                                    selectCity,
+                                    _txtDescriptionController.text,
+                                    selectDistrict,
+                                    UserDataUtil.field(userData, 'Email'),
+                                    UserDataUtil.mobileAsInt(userData),
+                                    nic,
+                                    UserDataUtil.field(userData, 'Name'),
+                                    UserDataUtil.field(
+                                        userData, 'ProfileImage'),
+                                    selectDate,
+                                    selectType,
+                                  );
 
-                                  if (result = true) {
+                                  EasyLoading.dismiss();
+                                  if (!mounted) return;
+
+                                  if (result == true) {
                                     EasyLoading.showSuccess(
                                         'Appointment Submitted successfully!',
-                                        duration: Duration(seconds: 8));
+                                        duration:
+                                            const Duration(seconds: 3));
                                     print(
                                         "******Appointment Submitted successfully!******");
-                                    // EasyLoading.dismiss();
-                                    Navigator.pop(context);
-                                    Navigator.pushAndRemoveUntil(
-                                        context,
-                                        MaterialPageRoute(
-                                            builder: (context) => HomeBase()),
-                                        (route) => false);
+                                    Navigator.of(context).pushAndRemoveUntil(
+                                      MaterialPageRoute(
+                                          builder: (_) =>
+                                              const AppointmentBase()),
+                                      (route) => false,
+                                    );
                                   } else {
                                     EasyLoading.showError(
                                         "Appointment Submitted Failed");
@@ -318,75 +367,70 @@ class _AppointmentFormState extends State<AppointmentForm> {
     );
   }
 
-  Future<bool?> submitAppointment(
-      String Address,
-      String City,
-      String Description,
-      String District,
-      String Email,
-      int Mobile,
-      String NIC,
-      String Name,
-      String ProfileImage,
-      DateTime Date,
-      String Type) async {
-    final databaseRef = FirebaseDatabase.instance.ref();
-    FirebaseStorage storage = FirebaseStorage.instance;
+  Future<bool> submitAppointment(
+    String Address,
+    String City,
+    String Description,
+    String District,
+    String Email,
+    int Mobile,
+    String NIC,
+    String Name,
+    String ProfileImage,
+    DateTime Date,
+    String Type,
+  ) async {
+    final firebase = FirebaseService.instance;
+    final timeout = FirebaseService.rtdbTimeout;
+    final nicKey = UserDataUtil.normalizeNic(NIC);
 
-    ///Get Last Appointment ID -1st Step
+    try {
+      await firebase.ensureAuthenticatedForWrite();
+      final databaseRef = firebase.rootRef;
 
-    var get_AID = databaseRef.child("/Appointments/LastAID");
-    DatabaseEvent event = await get_AID.once();
-    int AID = (event.snapshot.value).hashCode + 1;
-    print("************ Complaint ID = $AID**************");
+      final aid = await firebase.nextAppointmentId();
+      print("************ Appointment ID = $aid **************");
 
-    if (AID != null) {
-      try {
-        print("************Get Complaint ID = $AID");
+      final data = {
+        "AID": aid,
+        "Address": Address,
+        "City": City,
+        "Description": Description,
+        "District": District,
+        "Email": Email,
+        "Mobile": Mobile,
+        "NIC": nicKey,
+        "Name": Name,
+        "ProfileImage": ProfileImage,
+        "RequestedDate": Date.toString(),
+        "ScheduledDate": "Pending",
+        "Type": Type,
+      };
 
-        var data = {
-          "AID": AID,
-          "Address": Address,
-          "City": City,
-          "Description": Description,
-          "District": District,
-          "Email": Email,
-          "Mobile": Mobile,
-          "NIC": NIC,
-          "Name": Name,
-          "ProfileImage": ProfileImage,
-          "RequestedDate": Date.toString(),
-          "ScheduledDate": "Pending",
-          "Type": Type
-        };
+      // Use non-array path: /Records/$aid (avoids Firebase [null, record] sparse arrays).
+      await databaseRef
+          .child('/Appointments/PublicAppointments/Records/$aid')
+          .set(data)
+          .timeout(timeout);
+      print("**************Save Appointment ");
 
-        ///submit Appointment - 2nd Step
+      final countEvent = await databaseRef
+          .child('/Appointments/PublicAppointmentCount')
+          .once()
+          .timeout(timeout);
+      var count = int.tryParse('${countEvent.snapshot.value}') ?? 0;
+      count++;
+      await databaseRef
+          .child('/Appointments')
+          .update({
+            'PublicAppointmentCount': count,
+            'LastAID': aid,
+          })
+          .timeout(timeout);
 
-        databaseRef
-            .child("/Appointments/PublicAppointments/")
-            .child("$AID")
-            .set(data);
-        print("**************Save Appointment ");
-
-        ///Update Appointment Count
-        var getAppointmentCount =
-            databaseRef.child("/Appointments/PublicAppointmentCount");
-        DatabaseEvent event = await getAppointmentCount.once();
-        print(event.snapshot.value);
-        int Appointment_Count = (event.snapshot.value).hashCode + 1;
-        databaseRef
-            .child("/Appointments/")
-            .update({'PublicAppointmentCount': Appointment_Count});
-
-        ///Update Last Complaint ID
-        databaseRef.child("/Appointments/").update({'LastAID': AID});
-
-        return true;
-      } catch (e) {
-        print(e);
-        return false;
-      }
-    } else {
+      return true;
+    } catch (e) {
+      print(e);
       return false;
     }
   }

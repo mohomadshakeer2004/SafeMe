@@ -132,6 +132,16 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
     }
   }
 
+  String _complaintDateText(String pattern) {
+    final raw = UserDataUtil.field(complaintData, 'Date');
+    if (raw.isEmpty) return '';
+    try {
+      return DateFormat(pattern).format(DateTime.parse(raw));
+    } catch (_) {
+      return raw;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -246,7 +256,9 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                             ),
                                             Flexible(
                                               child: Text(
-                                                complaintData['CID'].toString(),
+                                                UserDataUtil.field(
+                                                    complaintData, 'CID',
+                                                    fallback: widget.CID),
                                                 style: TextStyle(
                                                   fontSize: 15,
                                                   // fontWeight: FontWeight.bold,
@@ -270,8 +282,8 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                             ),
                                             Flexible(
                                               child: Text(
-                                                complaintData['District']
-                                                    .toString(),
+                                                UserDataUtil.field(
+                                                    complaintData, 'District'),
                                                 style: TextStyle(
                                                   fontSize: 15,
                                                   // fontWeight: FontWeight.bold,
@@ -295,8 +307,8 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                             ),
                                             Flexible(
                                               child: Text(
-                                                complaintData['City']
-                                                    .toString(),
+                                                UserDataUtil.field(
+                                                    complaintData, 'City'),
                                                 style: TextStyle(
                                                   fontSize: 15,
                                                   // fontWeight: FontWeight.bold,
@@ -327,10 +339,8 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                             ),
                                             Flexible(
                                               child: Text(
-                                                DateFormat('yyyy-MM-dd').format(
-                                                    DateTime.parse(
-                                                        complaintData['Date']
-                                                            .toString())),
+                                                _complaintDateText(
+                                                    'yyyy-MM-dd'),
                                                 style: TextStyle(
                                                   fontSize: 15,
                                                   // fontWeight: FontWeight.bold,
@@ -354,10 +364,7 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                             ),
                                             Flexible(
                                               child: Text(
-                                                DateFormat('hh:mm a').format(
-                                                    DateTime.parse(
-                                                        complaintData['Date']
-                                                            .toString())),
+                                                _complaintDateText('hh:mm a'),
                                                 style: TextStyle(
                                                   fontSize: 15,
                                                   // fontWeight: FontWeight.bold,
@@ -381,8 +388,8 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                             ),
                                             Flexible(
                                               child: Text(
-                                                complaintData['Status']
-                                                    .toString(),
+                                                UserDataUtil.field(
+                                                    complaintData, 'Status'),
                                                 style: TextStyle(
                                                   fontSize: 15,
                                                   // fontWeight: FontWeight.bold,
@@ -425,7 +432,7 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                     ),
                                     Flexible(
                                       child: Text(
-                                        userData['Name'],
+                                        UserDataUtil.field(userData, 'Name'),
                                         style: TextStyle(
                                           fontSize: 15,
                                           // fontWeight: FontWeight.bold,
@@ -449,7 +456,9 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                     ),
                                     Flexible(
                                       child: Text(
-                                        userData['NIC'],
+                                        UserDataUtil.field(
+                                            userData, 'NIC',
+                                            fallback: widget.NIC),
                                         style: TextStyle(
                                           fontSize: 15,
                                           // fontWeight: FontWeight.bold,
@@ -473,7 +482,7 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                     ),
                                     Flexible(
                                       child: Text(
-                                        userData['Email'],
+                                        UserDataUtil.field(userData, 'Email'),
                                         style: TextStyle(
                                           fontSize: 15,
                                           // fontWeight: FontWeight.bold,
@@ -497,7 +506,7 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                     ),
                                     Flexible(
                                       child: Text(
-                                        userData['Mobile'],
+                                        UserDataUtil.field(userData, 'Mobile'),
                                         style: TextStyle(
                                           fontSize: 15,
                                           // fontWeight: FontWeight.bold,
@@ -522,7 +531,7 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                     ),
                                     Flexible(
                                       child: Text(
-                                        userData['Address'],
+                                        UserDataUtil.field(userData, 'Address'),
                                         style: TextStyle(
                                           fontSize: 15,
                                           // fontWeight: FontWeight.bold,
@@ -561,7 +570,8 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                     ),
                                     Flexible(
                                       child: Text(
-                                        complaintData['Type'].toString(),
+                                        UserDataUtil.field(
+                                            complaintData, 'Type'),
                                         style: TextStyle(
                                           fontSize: 15,
                                           // fontWeight: FontWeight.bold,
@@ -586,7 +596,8 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                     ),
                                     Flexible(
                                       child: Text(
-                                        complaintData['Description'].toString(),
+                                        UserDataUtil.field(
+                                            complaintData, 'Description'),
                                         style: TextStyle(
                                           fontSize: 15,
                                           // fontWeight: FontWeight.bold,
@@ -611,7 +622,7 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                     ),
                                     Flexible(
                                       child: Text(
-                                        "${complaintData['Latitude'].toString()} , ${complaintData['Longitude'].toString()}",
+                                        "${UserDataUtil.field(complaintData, 'Latitude')} , ${UserDataUtil.field(complaintData, 'Longitude')}",
                                         style: TextStyle(
                                           fontSize: 15,
                                           // fontWeight: FontWeight.bold,
@@ -641,10 +652,12 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
                                 Container(
-                                  child: complaintData['Image1'] != null
+                                  child: UserDataUtil.field(
+                                              complaintData, 'Image1')
+                                          .isNotEmpty
                                       ? CachedNetworkImage(
-                                          imageUrl: complaintData['Image1']
-                                              .toString(),
+                                          imageUrl: UserDataUtil.field(
+                                              complaintData, 'Image1'),
                                           width: sysWidth / 3,
                                           placeholder: (context, url) =>
                                               Container(
@@ -669,10 +682,12 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                                   //Image.network(images[pagePosition]),
                                 ),
                                 Container(
-                                  child: complaintData['Image2'] != null
+                                  child: UserDataUtil.field(
+                                              complaintData, 'Image2')
+                                          .isNotEmpty
                                       ? CachedNetworkImage(
-                                          imageUrl: complaintData['Image2']
-                                              .toString(),
+                                          imageUrl: UserDataUtil.field(
+                                              complaintData, 'Image2'),
                                           width: sysWidth / 3,
                                           placeholder: (context, url) =>
                                               Container(
@@ -712,7 +727,7 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                               ),
                             ),
                             child: Text(
-                              complaintData['Reason'].toString(),
+                              UserDataUtil.field(complaintData, 'Reason'),
                               style: TextStyle(
                                 fontSize: 15,
                                 // fontWeight: FontWeight.bold,

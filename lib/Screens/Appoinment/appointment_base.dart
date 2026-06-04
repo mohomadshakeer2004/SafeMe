@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:safe_me/util/date_parse_util.dart';
 import 'package:safe_me/service/firebase_service.dart';
 import 'package:safe_me/service/userService.dart';
+import 'package:safe_me/util/user_data_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
@@ -25,11 +28,45 @@ class AppointmentBase extends StatefulWidget {
 }
 
 class _AppointmentBaseState extends State<AppointmentBase> {
+  /// Fixed card height (appointments have no image panel like complaints).
+  static const double _appointmentCardHeight = 120;
+
   RefreshController _refreshController =
       RefreshController(initialRefresh: false);
 
   List<Map<String, dynamic>> myPublicAppointments = [];
   List<Map<String, dynamic>> myPoliceAppointments = [];
+
+  String _publicAppointmentId(Map<String, dynamic> item) =>
+      '${item['AID'] ?? item['aid'] ?? ''}';
+
+  String _policeAppointmentId(Map<String, dynamic> item) =>
+      '${item['AIDP'] ?? item['AID'] ?? item['aid'] ?? ''}';
+
+  /// Same proportions as complaint history: flex 1 / 4 / 10.
+  Widget _complaintStyleIdStrip(String label) {
+    return Expanded(
+      flex: 1,
+      child: Container(
+        color: secondary,
+        height: double.infinity,
+        child: Center(
+          child: RotatedBox(
+            quarterTurns: 3,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: normalTextColor,
+                fontFamily: 'Poppins-Bold',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _loadAppointments() async {
     EasyLoading.show(status: "Getting Appointment Data");
@@ -57,8 +94,22 @@ class _AppointmentBaseState extends State<AppointmentBase> {
       }
 
       final firebase = FirebaseService.instance;
-      final public = await firebase.fetchMyPublicAppointments(nic);
-      final police = await firebase.fetchMyPoliceAppointments(nic);
+      String? email;
+      try {
+        final userSnap = await firebase.getPublicUser(nic);
+        if (userSnap.exists && userSnap.value is Map) {
+          final userMap = UserDataUtil.withDefaults(
+            jsonDecode(jsonEncode(userSnap.value)) as Map<String, dynamic>,
+            nic,
+          );
+          email = UserDataUtil.field(userMap, 'Email');
+        }
+      } catch (_) {}
+
+      final public =
+          await firebase.fetchMyPublicAppointments(nic, email: email);
+      final police =
+          await firebase.fetchMyPoliceAppointments(nic, email: email);
 
       if (!mounted) return;
       setState(() {
@@ -154,9 +205,12 @@ class _AppointmentBaseState extends State<AppointmentBase> {
               child: InkWell(
                 onTap: () {
                   Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => AppointmentForm()));
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const AppointmentForm()),
+                  ).then((_) {
+                    if (mounted) _loadAppointments();
+                  });
                 },
                 child: Container(
                   height: sysHeight / 20 * 1.5,
@@ -247,7 +301,8 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                   child: Column(
                                                     children: [
                                                       Slidable(
-                                                        key: const ValueKey(0),
+                                                        key: ValueKey(
+                                                            'public_appt_${_publicAppointmentId(myPublicAppointments[i])}'),
                                                         endActionPane:
                                                             ActionPane(
                                                           motion:
@@ -260,7 +315,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                             SlidableAction(
                                                               onPressed: (ctx) {
                                                                 print(
-                                                                    "Delete Complaint");
+                                                                    "Delete Appointment");
                                                               },
                                                               backgroundColor:
                                                                   Color(
@@ -291,7 +346,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                           child: Container(
                                                             width: sysWidth,
                                                             height:
-                                                                sysHeight * 0.2,
+                                                                _appointmentCardHeight,
                                                             decoration: BoxDecoration(
                                                                 borderRadius:
                                                                     BorderRadius
@@ -302,31 +357,40 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                         .black45)),
                                                             child: Row(
                                                               children: [
+                                                                _complaintStyleIdStrip(
+                                                                  'AID-${_publicAppointmentId(myPublicAppointments[i])}',
+                                                                ),
                                                                 Expanded(
-                                                                  // flex: 10,
-                                                                  child:
-                                                                      SingleChildScrollView(
+                                                                  flex: 14,
+                                                                  child: Container(
+                                                                    height: double.infinity,
+                                                                    decoration: const BoxDecoration(
+                                                                      border: Border(
+                                                                        left: BorderSide(
+                                                                            color: Colors.black45),
+                                                                      ),
+                                                                    ),
                                                                     child:
-                                                                        Padding(
-                                                                      padding: const EdgeInsets
-                                                                              .only(
-                                                                          left:
-                                                                              8,
-                                                                          top:
-                                                                              5,
-                                                                          bottom:
-                                                                              5),
+                                                                        SingleChildScrollView(
                                                                       child:
-                                                                          Column(
-                                                                        crossAxisAlignment:
-                                                                            CrossAxisAlignment.start,
-                                                                        mainAxisAlignment:
-                                                                            MainAxisAlignment.center,
-                                                                        children: [
-                                                                          Row(
-                                                                            children: [
-                                                                              Text(
-                                                                                "Type : ",
+                                                                          Padding(
+                                                                        padding: const EdgeInsets
+                                                                            .only(
+                                                                          left: 8,
+                                                                          top: 5,
+                                                                          bottom: 5,
+                                                                        ),
+                                                                        child:
+                                                                            Column(
+                                                                          crossAxisAlignment:
+                                                                              CrossAxisAlignment.start,
+                                                                          mainAxisAlignment:
+                                                                              MainAxisAlignment.center,
+                                                                          children: [
+                                                                            Row(
+                                                                              children: [
+                                                                                Text(
+                                                                                  "Type : ",
                                                                                 style: TextStyle(
                                                                                   fontSize: 15,
                                                                                   fontWeight: FontWeight.bold,
@@ -442,7 +506,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                       ),
                                                                     ),
                                                                   ),
-                                                                ),
+                                                                ),),
                                                               ],
                                                             ),
                                                           ),
@@ -495,7 +559,8 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                 child: Column(
                                                   children: [
                                                     Slidable(
-                                                      key: const ValueKey(0),
+                                                      key: ValueKey(
+                                                          'police_appt_${_policeAppointmentId(myPoliceAppointments[i])}'),
                                                       endActionPane: ActionPane(
                                                         motion: BehindMotion(),
                                                         dismissible:
@@ -506,7 +571,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                           SlidableAction(
                                                             onPressed: (ctx) {
                                                               print(
-                                                                  "Delete Complaint");
+                                                                  "Delete Appointment");
                                                             },
                                                             backgroundColor:
                                                                 Color(
@@ -537,7 +602,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                         child: Container(
                                                           width: sysWidth,
                                                           height:
-                                                              sysHeight * 0.2,
+                                                              _appointmentCardHeight,
                                                           decoration: BoxDecoration(
                                                               borderRadius:
                                                                   BorderRadius
@@ -548,55 +613,40 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                       .black45)),
                                                           child: Row(
                                                             children: [
+                                                              _complaintStyleIdStrip(
+                                                                'AID-${_policeAppointmentId(myPoliceAppointments[i])}',
+                                                              ),
                                                               Expanded(
-                                                                // flex: 10,
-                                                                child:
-                                                                    SingleChildScrollView(
+                                                                flex: 14,
+                                                                child: Container(
+                                                                  height: double.infinity,
+                                                                  decoration: const BoxDecoration(
+                                                                    border: Border(
+                                                                      left: BorderSide(
+                                                                          color: Colors.black45),
+                                                                    ),
+                                                                  ),
                                                                   child:
-                                                                      Padding(
-                                                                    padding: const EdgeInsets
-                                                                            .only(
+                                                                      SingleChildScrollView(
+                                                                    child: Padding(
+                                                                      padding: const EdgeInsets
+                                                                          .only(
                                                                         left: 8,
                                                                         top: 5,
-                                                                        bottom:
-                                                                            5),
-                                                                    child:
-                                                                        Column(
-                                                                      crossAxisAlignment:
-                                                                          CrossAxisAlignment
-                                                                              .start,
-                                                                      mainAxisAlignment:
-                                                                          MainAxisAlignment
-                                                                              .center,
-                                                                      children: [
-                                                                        Row(
-                                                                          children: [
-                                                                            Text(
-                                                                              "AID : ",
-                                                                              style: TextStyle(
-                                                                                fontSize: 15,
-                                                                                fontWeight: FontWeight.bold,
-                                                                                color: textBlackColor,
-                                                                                fontFamily: 'Poppins-Bold',
-                                                                              ),
-                                                                            ),
-                                                                            Flexible(
-                                                                              child: Text(
-                                                                                "${myPoliceAppointments[i]['AIDP']}",
-                                                                                style: TextStyle(
-                                                                                  fontSize: 15,
-                                                                                  // fontWeight: FontWeight.bold,
-                                                                                  color: textBlackColor,
-                                                                                  fontFamily: 'Poppins-Light',
-                                                                                ),
-                                                                              ),
-                                                                            )
-                                                                          ],
-                                                                        ),
-                                                                        Row(
-                                                                          children: [
-                                                                            Text(
-                                                                              "Type : ",
+                                                                        bottom: 5,
+                                                                      ),
+                                                                      child: Column(
+                                                                        crossAxisAlignment:
+                                                                            CrossAxisAlignment
+                                                                                .start,
+                                                                        mainAxisAlignment:
+                                                                            MainAxisAlignment
+                                                                                .center,
+                                                                        children: [
+                                                                          Row(
+                                                                            children: [
+                                                                              Text(
+                                                                                "Type : ",
                                                                               style: TextStyle(
                                                                                 fontSize: 15,
                                                                                 fontWeight: FontWeight.bold,
@@ -672,6 +722,7 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                                                                     ),
                                                                   ),
                                                                 ),
+                                                              ),
                                                               ),
                                                             ],
                                                           ),
