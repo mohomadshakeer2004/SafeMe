@@ -39,7 +39,21 @@ After enabling Auth and adding SHA:
 2. Replace `android/app/google-services.json` in this project
 3. The file should contain non-empty `"oauth_client": [...]` entries (not `[]`)
 
-## 4. Fix `API key expired`
+## 4. Two API keys (do not mix them)
+
+| Key | Use |
+|-----|-----|
+| `AIzaSyCXmkvySBLb6EgxiUkPvsqEYmQEs0MmwlU` | **Flutter Android app** — `firebase_options.dart`, `google-services.json` |
+| `AIzaSyCWbI7XXxoW5QYB_MD_YFXtnQOi7yhA-HE` | **Admin web panel only** — `SafeMe-Admin-master/firebase-JS/firebase-config.js` |
+
+In [Google Cloud Console](https://console.cloud.google.com/) → **Credentials** → edit the **mobile** key:
+
+1. **Application restrictions**: Android apps → package `com.safe_me.safe_me1` + your debug SHA-1  
+2. **API restrictions**: enable at least **Firebase Realtime Database API**, **Identity Toolkit API**, **Firebase Installations API**
+
+If complaint submit times out, the app now also writes via HTTPS REST; errors in logcat will mention the key above.
+
+## 5. Fix `API key expired`
 
 If logcat shows:
 
@@ -55,7 +69,7 @@ API key expired. Please renew the API key.
 6. Replace `android/app/google-services.json` and update `lib/firebase_options.dart` if the `apiKey` value changed
 7. Ensure **Identity Toolkit API** (Firebase Auth) is **enabled** for the project
 
-## 5. Rebuild the app
+## 6. Rebuild the app
 
 ```bash
 flutter clean
@@ -63,7 +77,7 @@ flutter pub get
 flutter run
 ```
 
-## 6. Test user (from database export)
+## 7. Test user (from database export)
 
 | NIC | Password | Firebase Auth email |
 |-----|----------|---------------------|
@@ -89,3 +103,13 @@ Then log in with NIC `961240999V` and password `1234` (your database password). 
 ```
 
 All reads/writes require a signed-in Firebase user (Email/Password or Anonymous during migration).
+
+## Complaints
+
+Complaints are saved at the legacy path (same as admin panel):
+
+`Complaints/All/{CID}`
+
+The mobile app uses REST HTTPS when the RTDB SDK is slow. CIDs are assigned locally (`4`, `5`, …) when global counters time out.
+
+Admin panel reads only `Complaints/All`.

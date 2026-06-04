@@ -109,7 +109,10 @@ class _ComplaintHomeState extends State<ComplaintHome> {
 
     EasyLoading.show(status: 'Deleting...');
     try {
-      await FirebaseService.instance.deleteComplaint(cid);
+      await FirebaseService.instance.deleteComplaint(
+        cid,
+        nic: '${removed['NIC'] ?? ''}',
+      );
     } catch (e) {
       debugPrint('Delete complaint failed: $e');
       if (mounted) {

@@ -72,11 +72,13 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
     try {
       final databaseRef = FirebaseService.instance.rootRef;
 
-      var get_UserData =
-          databaseRef.child('/Complaints/All').child(widget.CID);
-      DatabaseEvent event = await get_UserData.once();
+      final event = await databaseRef
+          .child('/Complaints/All/${widget.CID}')
+          .once()
+          .timeout(FirebaseService.rtdbTimeout);
+      final snapshot = event.snapshot;
 
-      if (event.snapshot.value == null) {
+      if (!snapshot.exists || snapshot.value == null) {
         if (mounted) {
           setState(() {
             complaintData = {};
@@ -86,7 +88,7 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
       }
 
       Map<String, dynamic> data =
-          jsonDecode(jsonEncode(event.snapshot.value)) as Map<String, dynamic>;
+          jsonDecode(jsonEncode(snapshot.value)) as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
         complaintData = data;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
@@ -457,6 +458,7 @@ class _ComplaintFormState extends State<ComplaintForm> {
                                   EasyLoading.show(status: "Submitting...");
                                   print("******Validate******");
                                   var result = false;
+                                  Object? submitError;
                                   try {
                                     result = await submitComplaint(
                                         UserDataUtil.field(userData, 'Address'),
@@ -475,6 +477,8 @@ class _ComplaintFormState extends State<ComplaintForm> {
                                         UserDataUtil.field(
                                             userData, 'ProfileImage'),
                                         type);
+                                  } catch (e) {
+                                    submitError = e;
                                   } finally {
                                     EasyLoading.dismiss();
                                   }
@@ -498,7 +502,10 @@ class _ComplaintFormState extends State<ComplaintForm> {
                                     });
                                   } else {
                                     EasyLoading.showError(
-                                        "Complaint Submitted Failed");
+                                      submitError is TimeoutException
+                                          ? 'Submission timed out. Check internet and try again.'
+                                          : 'Complaint Submitted Failed',
+                                    );
                                   }
                                 } else {
                                   EasyLoading.dismiss();
@@ -682,20 +689,14 @@ class _ComplaintFormState extends State<ComplaintForm> {
     String Type,
   ) async {
     final firebase = FirebaseService.instance;
-    final timeout = FirebaseService.rtdbTimeout;
+    final nicKey = UserDataUtil.normalizeNic(NIC);
 
     try {
       await firebase.ensureAuthenticatedForWrite();
-      final databaseRef = firebase.rootRef;
+      print('submitComplaint: auth OK');
 
-      final cidEvent = await databaseRef
-          .child("/Complaints/lastCID")
-          .once()
-          .timeout(timeout);
-      var cid = int.tryParse('${cidEvent.snapshot.value}') ?? 0;
-      cid++;
-
-      print("************ Complaint ID = $cid**************");
+      final cid = await firebase.allocateNextComplaintId();
+      print('submitComplaint: CID=$cid');
 
       final data = {
         "CID": cid,
@@ -710,7 +711,7 @@ class _ComplaintFormState extends State<ComplaintForm> {
         "Latitude": Latitude,
         "Longitude": Longitude,
         "Mobile": Mobile,
-        "NIC": NIC,
+        "NIC": nicKey,
         "Name": Name,
         "ProfileImage": ProfileImage,
         "Reason": "",
@@ -718,38 +719,24 @@ class _ComplaintFormState extends State<ComplaintForm> {
         "Type": Type,
       };
 
-      await databaseRef
-          .child("/Complaints/All/$cid")
-          .set(data)
-          .timeout(timeout);
-      print("**************Save Complaint response ");
+      await firebase.saveComplaintToAll(cid: cid, data: data);
+      print('submitComplaint: saved Complaints/All/$cid');
 
-      await databaseRef
-          .child("/Complaints/lastCID")
-          .set(cid)
-          .timeout(timeout);
+      await firebase.syncLegacyComplaintCounters(cid);
 
-      final countEvent = await databaseRef
-          .child("/Complaints/ComplaintCount")
-          .once()
-          .timeout(timeout);
-      final count = int.tryParse('${countEvent.snapshot.value}') ?? 0;
-      await databaseRef
-          .child("/Complaints/ComplaintCount")
-          .set(count + 1)
-          .timeout(timeout);
-
-      _uploadComplaintImages(databaseRef, cid, Image1, Image2);
+      _uploadComplaintImages(firebase, nicKey, cid, Image1, Image2);
 
       return true;
-    } catch (e) {
+    } catch (e, st) {
       print('submitComplaint failed: $e');
+      print(st);
       return false;
     }
   }
 
   Future<void> _uploadComplaintImages(
-    DatabaseReference databaseRef,
+    FirebaseService firebase,
+    String nicKey,
     int cid,
     File image1,
     File image2,
@@ -771,10 +758,7 @@ class _ComplaintFormState extends State<ComplaintForm> {
       if (results[1] != null) imageUpdates['Image2'] = results[1];
       if (imageUpdates.isEmpty) return;
 
-      await databaseRef
-          .child("/Complaints/All/$cid")
-          .update(imageUpdates)
-          .timeout(FirebaseService.rtdbTimeout);
+      await firebase.patchComplaintInAll(cid: cid, updates: imageUpdates);
     } catch (e) {
       print('Complaint image upload failed: $e');
     }

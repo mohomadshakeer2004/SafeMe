@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:safe_me/firebase_options.dart';
+import 'package:safe_me/service/rtdb_rest_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Shared Firebase Realtime Database + auth helpers for [safe-a67e3].
 class FirebaseService {
@@ -24,7 +28,49 @@ class FirebaseService {
       app: Firebase.app(),
       databaseURL: DefaultFirebaseOptions.databaseUrl,
     );
+    _database!.setPersistenceEnabled(false);
     return _database!;
+  }
+
+  /// Legacy path used by admin + mobile: [Complaints/All/{cid}].
+  String complaintAllPath(int cid) => 'Complaints/All/$cid';
+
+  DatabaseReference complaintAllRef(int cid) =>
+      rootRef.child(complaintAllPath(cid));
+
+  /// Saves to [Complaints/All/{cid}] via REST (SDK often hangs on device).
+  Future<void> saveComplaintToAll({
+    required int cid,
+    required Map<String, dynamic> data,
+  }) async {
+    await ensureAuthenticatedForWrite();
+    final path = complaintAllPath(cid);
+    print('saveComplaintToAll: REST PUT $path');
+    try {
+      await RtdbRestService.instance.put(path, data);
+      print('saveComplaintToAll: REST OK');
+      return;
+    } catch (e) {
+      print('saveComplaintToAll: REST failed ($e), trying SDK…');
+    }
+
+    await complaintAllRef(cid).set(data).timeout(const Duration(seconds: 20));
+    print('saveComplaintToAll: SDK OK');
+  }
+
+  Future<void> patchComplaintInAll({
+    required int cid,
+    required Map<String, dynamic> updates,
+  }) async {
+    await ensureAuthenticatedForWrite();
+    final path = complaintAllPath(cid);
+    try {
+      await RtdbRestService.instance.patch(path, updates);
+      return;
+    } catch (e) {
+      print('patchComplaintInAll: REST failed ($e), trying SDK…');
+    }
+    await complaintAllRef(cid).update(updates).timeout(const Duration(seconds: 20));
   }
 
   DatabaseReference get rootRef => database.ref();
@@ -87,14 +133,142 @@ class FirebaseService {
     }
   }
 
-  static const Duration rtdbTimeout = Duration(seconds: 20);
+  static const Duration rtdbTimeout = Duration(seconds: 45);
 
   /// Re-authenticates when the Firebase session expired (RTDB writes need auth).
   Future<void> ensureAuthenticatedForWrite() async {
-    if (FirebaseAuth.instance.currentUser != null) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.email == firebaseAuthEmail) {
       return;
     }
-    await signInAsAdmin();
+    if (user != null) {
+      await signOut();
+    }
+    await signInAsAdmin().timeout(
+      rtdbTimeout,
+      onTimeout: () => throw TimeoutException(
+        'Firebase sign-in timed out. Check your connection and API key.',
+      ),
+    );
+  }
+
+  static int _parseCounter(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('$value') ?? 0;
+  }
+
+  static const String _localComplaintCidKey = 'local_complaint_last_cid';
+
+  /// Reads [Complaints/lastCID] from RTDB and returns that value + 1.
+  Future<int> allocateNextComplaintId() async {
+    await ensureAuthenticatedForWrite();
+    var last = await _readComplaintsLastCid();
+    final next = last + 1;
+    print('allocateNextComplaintId: Complaints/lastCID=$last → new CID=$next');
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_localComplaintCidKey, next);
+    return next;
+  }
+
+  Future<int> _readComplaintsLastCid() async {
+    try {
+      final raw = await RtdbRestService.instance
+          .get('Complaints/lastCID')
+          .timeout(const Duration(seconds: 12));
+      return _parseCounter(raw);
+    } catch (e) {
+      print('_readComplaintsLastCid: REST failed ($e), trying SDK…');
+    }
+
+    try {
+      final snap = await rootRef
+          .child('Complaints/lastCID')
+          .get()
+          .timeout(const Duration(seconds: 12));
+      return _parseCounter(snap.value);
+    } catch (e) {
+      print('_readComplaintsLastCid: SDK failed ($e), using local cache');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_localComplaintCidKey) ?? 0;
+  }
+
+  Future<int> _readComplaintsComplaintCount() async {
+    try {
+      final raw = await RtdbRestService.instance
+          .get('Complaints/ComplaintCount')
+          .timeout(const Duration(seconds: 12));
+      return _parseCounter(raw);
+    } catch (e) {
+      print('_readComplaintsComplaintCount: REST failed ($e), trying SDK…');
+    }
+
+    try {
+      final snap = await rootRef
+          .child('Complaints/ComplaintCount')
+          .get()
+          .timeout(const Duration(seconds: 12));
+      return _parseCounter(snap.value);
+    } catch (e) {
+      print('_readComplaintsComplaintCount: SDK failed ($e)');
+      return 0;
+    }
+  }
+
+  Future<void> _writeComplaintsComplaintCount(int count) async {
+    try {
+      await RtdbRestService.instance.put('Complaints/ComplaintCount', count);
+      print('_writeComplaintsComplaintCount: REST OK → $count');
+      return;
+    } catch (e) {
+      print('_writeComplaintsComplaintCount: REST failed ($e), SDK…');
+    }
+
+    await rootRef
+        .child('Complaints/ComplaintCount')
+        .set(count)
+        .timeout(const Duration(seconds: 20));
+    print('_writeComplaintsComplaintCount: SDK OK → $count');
+  }
+
+  /// Writes [Complaints/lastCID] and [Complaints/ComplaintCount] (+1).
+  Future<void> syncLegacyComplaintCounters(int newCid) async {
+    await ensureAuthenticatedForWrite();
+
+    final currentCount = await _readComplaintsComplaintCount();
+    final newCount = currentCount + 1;
+    print(
+      'syncLegacyComplaintCounters: lastCID=$newCid, '
+      'ComplaintCount $currentCount → $newCount',
+    );
+
+    try {
+      await RtdbRestService.instance.patch('Complaints', {
+        'lastCID': newCid,
+        'ComplaintCount': newCount,
+      });
+      print('syncLegacyComplaintCounters: patch Complaints REST OK');
+      return;
+    } catch (e) {
+      print('syncLegacyComplaintCounters: patch failed ($e), separate writes…');
+    }
+
+    try {
+      await RtdbRestService.instance.put('Complaints/lastCID', newCid);
+      print('syncLegacyComplaintCounters: lastCID REST OK');
+    } catch (e) {
+      await rootRef
+          .child('Complaints/lastCID')
+          .set(newCid)
+          .timeout(const Duration(seconds: 20));
+      print('syncLegacyComplaintCounters: lastCID SDK OK');
+    }
+
+    await _writeComplaintsComplaintCount(newCount);
   }
 
   Future<void> ensureAuthenticated() async {
@@ -111,52 +285,79 @@ class FirebaseService {
     await FirebaseAuth.instance.signOut();
   }
 
+  List<Map<String, dynamic>> _collectComplaintEntries(dynamic raw) {
+    if (raw == null) return [];
+
+    final items = <Map<String, dynamic>>[];
+
+    void tryAdd(dynamic value) {
+      if (value is! Map) return;
+      final entry = _normalizeEntryMap(value);
+      if (entry.containsKey('CID') || entry.containsKey('Type')) {
+        items.add(entry);
+      }
+    }
+
+    if (raw is Map) {
+      final map = _normalizeEntryMap(raw);
+      if (map.containsKey('CID') || map.containsKey('Type')) {
+        return [map];
+      }
+      for (final entry in map.entries) {
+        if (entry.key == 'lastCID' ||
+            entry.key == 'ComplaintCount' ||
+            entry.key == 'LostAndFoundCount' ||
+            entry.key == 'LastCID') {
+          continue;
+        }
+        tryAdd(entry.value);
+      }
+    } else if (raw is List) {
+      for (final value in raw) {
+        tryAdd(value);
+      }
+    }
+
+    return items;
+  }
+
   /// Complaints for the logged-in user (excludes Lost & Found entries in the same node).
   Future<List<Map<String, dynamic>>> fetchMyComplaints(String nic) async {
     await ensureAuthenticatedForWrite();
 
-    final snapshot = await rootRef
-        .child('Complaints/All')
-        .get()
-        .timeout(rtdbTimeout);
-
-    if (!snapshot.exists || snapshot.value == null) {
-      return [];
-    }
-
     final nicKey = nic.trim().toUpperCase();
-    final items = <Map<String, dynamic>>[];
+    final merged = <Map<String, dynamic>>[];
+    final seen = <String>{};
 
-    void addEntry(dynamic value) {
-      if (value is! Map) return;
-      final entry = Map<String, dynamic>.from(
-        value.map((k, v) => MapEntry(k.toString(), v)),
-      );
-      final entryNic = entry['NIC']?.toString().trim().toUpperCase() ?? '';
-      if (entryNic != nicKey) return;
-      final type = entry['Type']?.toString() ?? '';
-      if (type == 'Lost And Found') return;
-      items.add(entry);
-    }
-
-    final raw = snapshot.value;
-    if (raw is Map) {
-      for (final value in raw.values) {
-        addEntry(value);
-      }
-    } else if (raw is List) {
-      for (final value in raw) {
-        addEntry(value);
+    void addEntries(dynamic raw, {bool filterNic = false}) {
+      for (final entry in _collectComplaintEntries(raw)) {
+        if (filterNic && _nicFromEntry(entry) != nicKey) continue;
+        final type = entry['Type']?.toString() ?? '';
+        if (type == 'Lost And Found') continue;
+        final key = '${entry['CID'] ?? entry.hashCode}';
+        if (seen.add(key)) merged.add(entry);
       }
     }
 
-    items.sort((a, b) {
+    try {
+      final event = await rootRef
+          .child('Complaints/All')
+          .once()
+          .timeout(rtdbTimeout);
+      if (event.snapshot.exists && event.snapshot.value != null) {
+        addEntries(event.snapshot.value, filterNic: true);
+      }
+    } catch (e) {
+      print('fetchMyComplaints Complaints/All: $e');
+    }
+
+    merged.sort((a, b) {
       final aCid = int.tryParse('${a['CID']}') ?? 0;
       final bCid = int.tryParse('${b['CID']}') ?? 0;
       return bCid.compareTo(aCid);
     });
 
-    return items;
+    return merged;
   }
 
   /// SafeMe alerts for the logged-in user.
@@ -213,7 +414,7 @@ class FirebaseService {
         .timeout(rtdbTimeout);
   }
 
-  Future<void> deleteComplaint(String cid) async {
+  Future<void> deleteComplaint(String cid, {String? nic}) async {
     await ensureAuthenticatedForWrite();
     await rootRef
         .child('Complaints/All/$cid')
