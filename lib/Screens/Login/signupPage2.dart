@@ -34,7 +34,6 @@ class _SignupScreen2State extends State<SignupScreen2> {
   @override
   Widget build(BuildContext context) {
     context.watch<LanguageController>();
-    double sysHeight = MediaQuery.of(context).size.height;
     double sysWidth = MediaQuery.of(context).size.width;
     return Scaffold(
       backgroundColor: mainBGColor,
@@ -49,20 +48,17 @@ class _SignupScreen2State extends State<SignupScreen2> {
         child: FormBuilder(
             // autovalidateMode: AutovalidateMode.onUserInteraction,
             key: _fbKey,
-            child: Builder(
-              builder: (context) {
-                return SizedBox(
-                  width: sysWidth,
-                  height: sysHeight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 15, right: 15),
-                    child: Center(
-                      child: ListView(
-                        children: [
-                          Image.asset(
-                            "assets/images/logo.png",
-                            height: sysWidth / 100 * 40,
-                          ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.only(bottom: 24),
+                children: [
+                  Image.asset(
+                    "assets/images/logo.png",
+                    height: sysWidth * 0.25,
+                  ),
                           const SizedBox(height: 50),
                           Text(
                             "Password".tr(),
@@ -90,12 +86,10 @@ class _SignupScreen2State extends State<SignupScreen2> {
                             autofocus: false,
                             obscureText: true,
                             controller: _txtPasswordController,
-                            validator: (value) => value!.isEmpty
-                                ? 'Password is Required'
-                                : (RegExp(r'^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[!@#\$&*~]).{8,}$'))
-                                        .hasMatch(value)
-                                    ? null
-                                    : 'Enter a Valid email',
+                            validator: (value) =>
+                                value == null || value.isEmpty
+                                    ? 'Password is Required'
+                                    : null,
                             decoration: InputDecoration(
                               labelText: "Password".tr(),
                               labelStyle: hintTextStyle,
@@ -177,13 +171,9 @@ class _SignupScreen2State extends State<SignupScreen2> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 20),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
+                  const SizedBox(height: 20),
+                ],
+              ),
             )),
       ),
     );

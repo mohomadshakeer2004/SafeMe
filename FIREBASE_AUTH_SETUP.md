@@ -39,7 +39,23 @@ After enabling Auth and adding SHA:
 2. Replace `android/app/google-services.json` in this project
 3. The file should contain non-empty `"oauth_client": [...]` entries (not `[]`)
 
-## 4. Rebuild the app
+## 4. Fix `API key expired`
+
+If logcat shows:
+
+```text
+API key expired. Please renew the API key.
+```
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) → select project **safe-a67e3**
+2. Go to **APIs & Services** → **Credentials**
+3. Find the **API key** used by Firebase/Android (or create a new one)
+4. If expired/restricted: **Edit** → remove bad restrictions, or **Regenerate** / create a new key
+5. In [Firebase Console](https://console.firebase.google.com/) → **Project settings** → your Android app → **Download google-services.json** again
+6. Replace `android/app/google-services.json` and update `lib/firebase_options.dart` if the `apiKey` value changed
+7. Ensure **Identity Toolkit API** (Firebase Auth) is **enabled** for the project
+
+## 5. Rebuild the app
 
 ```bash
 flutter clean
@@ -47,11 +63,12 @@ flutter pub get
 flutter run
 ```
 
-## 5. Test user (from database export)
+## 6. Test user (from database export)
 
 | NIC | Password | Firebase Auth email |
 |-----|----------|---------------------|
 | `961240999V` | `1234` | (NIC only — Firebase uses shared admin account) |
+| `200405411177` | (your signup password) | 12-digit new-format NIC |
 
 In Firebase Console → **Authentication** → **Users** → **Add user**:
 

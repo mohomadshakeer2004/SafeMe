@@ -64,7 +64,6 @@ class _SignupScreen3State extends State<SignupScreen3> {
   @override
   Widget build(BuildContext context) {
     context.watch<LanguageController>();
-    double sysHeight = MediaQuery.of(context).size.height;
     double sysWidth = MediaQuery.of(context).size.width;
     return Scaffold(
       backgroundColor: mainBGColor,
@@ -79,20 +78,17 @@ class _SignupScreen3State extends State<SignupScreen3> {
         child: FormBuilder(
             // autovalidateMode: AutovalidateMode.onUserInteraction,
             key: _fbKey,
-            child: Builder(
-              builder: (context) {
-                return SizedBox(
-                  width: sysWidth,
-                  height: sysHeight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 15, right: 15),
-                    child: Center(
-                      child: ListView(
-                        children: [
-                          Image.asset(
-                            "assets/images/logo.png",
-                            height: sysWidth / 100 * 40,
-                          ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.only(bottom: 24),
+                children: [
+                  Image.asset(
+                    "assets/images/logo.png",
+                    height: sysWidth * 0.25,
+                  ),
                           const SizedBox(height: 50),
                           Text(
                             "Address".tr(),
@@ -271,7 +267,7 @@ class _SignupScreen3State extends State<SignupScreen3> {
                                 //   "/data/user/0/com.safe_me.safe_me1/cache/171c8078-00cc-4ff3-a8a1-c6a7514f375c545932229824712967.jpg",
                                 // );
 
-                                var resp = await save(
+                                final saved = await save(
                                   name,
                                   address,
                                   city,
@@ -284,33 +280,38 @@ class _SignupScreen3State extends State<SignupScreen3> {
                                 );
 
                                 EasyLoading.dismiss();
+                                if (!mounted) return;
 
+                                if (!saved) {
+                                  MotionToast.error(
+                                    title: const Text("Registration failed"),
+                                    description: const Text(
+                                      "Could not sign in to Firebase. Renew the API key in Google Cloud Console, then try again.",
+                                    ),
+                                    animationType:
+                                        AnimationType.slideInFromTop,
+                                    toastAlignment: Alignment.topCenter,
+                                  ).show(context);
+                                  return;
+                                }
+
+                                print("******data Save******");
                                 MotionToast.success(
-                                  title: Text("Success"),
-                                  description: Text(
+                                  title: const Text("Success"),
+                                  description: const Text(
                                       "Your account has been created successfully!"),
                                   animationType: AnimationType.slideInFromTop,
                                   toastAlignment: Alignment.topCenter,
                                 ).show(context);
 
-                                EasyLoading.showSuccess('Great Success!');
-
-                                Duration(seconds: 4);
-                                print("******data Save******");
-                                EasyLoading.dismiss();
-                                Navigator.pop(context);
-
-                                Future.delayed(Duration(milliseconds: 2500),
-                                    () {
-                                  Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (context) => LoginPage()));
-                                });
-
-                                // Navigator.of(context).pushReplacement(
-                                //     MaterialPageRoute(
-                                //         builder: (_) => LoginPage()));
+                                await Future.delayed(
+                                    const Duration(milliseconds: 1500));
+                                if (!mounted) return;
+                                Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(
+                                      builder: (_) => LoginPage()),
+                                  (route) => false,
+                                );
                               } else {
                                 print("******Not Validate******");
                               }
@@ -356,19 +357,15 @@ class _SignupScreen3State extends State<SignupScreen3> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 40),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
+                  const SizedBox(height: 40),
+                ],
+              ),
             )),
       ),
     );
   }
 
-  Future<void> save(
+  Future<bool> save(
     String Name,
     String Address,
     String City,
@@ -385,7 +382,10 @@ class _SignupScreen3State extends State<SignupScreen3> {
       await FirebaseService.instance.signInAsAdmin();
     } on FirebaseAuthException catch (e) {
       print('Auth signup failed (${e.code}): ${e.message}');
-      return print(e);
+      return false;
+    } catch (e) {
+      print('Auth signup failed: $e');
+      return false;
     }
 
     final databaseRef = FirebaseService.instance.rootRef;
@@ -398,26 +398,26 @@ class _SignupScreen3State extends State<SignupScreen3> {
         "District": District,
         "Email": Email,
         "Mobile": Mobile,
-        "NIC": NIC,
+        "NIC": nicKey,
         "Password": Password,
         "ProfileImage": "",
       };
 
       /// Save User Data Step 1
       var response =
-          databaseRef.child("/PublicUsers/All/").child(NIC).set(data);
+          databaseRef.child("/PublicUsers/All/").child(nicKey).set(data);
       print(
           "**************Save User Data Step-1 response = ${response.toString()}");
 
       /// Save User step -2 Profile Image (optional — requires Blaze plan)
       final imageUrl = await StorageService.uploadFile(
-        storagePath: 'public profile images/$NIC',
+        storagePath: 'public profile images/$nicKey',
         file: File(ProfileImage),
       );
       if (imageUrl != null) {
         print("********Image URL = $imageUrl");
         await databaseRef
-            .child("/PublicUsers/All/$NIC")
+            .child("/PublicUsers/All/$nicKey")
             .update({'ProfileImage': imageUrl});
       }
 
@@ -435,8 +435,10 @@ class _SignupScreen3State extends State<SignupScreen3> {
         FirebaseService.loggedInNicKey,
         nicKey,
       );
+      return true;
     } catch (e) {
-      return print(e);
+      print(e);
+      return false;
     }
   }
 }

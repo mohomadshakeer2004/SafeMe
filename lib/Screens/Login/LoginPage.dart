@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
 import '../../service/userService.dart';
+import '../../util/user_data_util.dart';
 import '../../widgets/forgotPasswordAlert.dart';
 import '../home_base.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
@@ -103,12 +104,12 @@ class _LoginPageState extends State<LoginPage> {
                             textCapitalization: TextCapitalization.characters,
                             autofocus: false,
                             controller: _txtEmailController,
-                            validator: (value) => value!.isEmpty
-                                ? 'NIC No is Required'
-                                : (RegExp(r'[!@#<>?":_`~;[\]\\|=+)]'))
-                                        .hasMatch(value)
-                                    ? 'Enter a Valid NIC No'
-                                    : null,
+                            validator: (value) =>
+                                value == null || value.trim().isEmpty
+                                    ? 'NIC No is Required'
+                                    : UserDataUtil.isValidNic(value)
+                                        ? null
+                                        : 'Enter a Valid NIC No',
                             decoration: InputDecoration(
                               labelText: "NIC".tr(),
                               labelStyle: hintTextStyle,
@@ -167,13 +168,14 @@ class _LoginPageState extends State<LoginPage> {
                                 }
 
                                 EasyLoading.dismiss();
+                                if (!mounted) return;
                                 if (result == true) {
                                   print('******************');
-                                  Navigator.pop(context);
-                                  Navigator.pushReplacement(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (context) => HomeBase()));
+                                  Navigator.of(context).pushAndRemoveUntil(
+                                    MaterialPageRoute(
+                                        builder: (_) => HomeBase()),
+                                    (route) => false,
+                                  );
                                 } else {
                                   print('-------------------');
                                   _txtPasswordController.clear();

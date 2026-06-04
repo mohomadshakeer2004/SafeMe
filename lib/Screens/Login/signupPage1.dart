@@ -13,6 +13,7 @@ import 'package:motion_toast/motion_toast.dart';
 import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
+import '../../util/user_data_util.dart';
 import 'LoginPage.dart';
 import 'signupPage2.dart';
 
@@ -43,7 +44,11 @@ class _SignupScreenState extends State<SignupScreen1> {
           onTap: () {
             showModalBottomSheet(
               context: context,
-              builder: ((build) => bottomSheet()),
+              backgroundColor: Colors.white,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              builder: (sheetContext) => bottomSheet(sheetContext),
             );
           },
           child: CircleAvatar(
@@ -69,7 +74,6 @@ class _SignupScreenState extends State<SignupScreen1> {
   @override
   Widget build(BuildContext context) {
     context.watch<LanguageController>();
-    double sysHeight = MediaQuery.of(context).size.height;
     double sysWidth = MediaQuery.of(context).size.width;
     return Scaffold(
       backgroundColor: mainBGColor,
@@ -84,20 +88,17 @@ class _SignupScreenState extends State<SignupScreen1> {
         child: FormBuilder(
             //autovalidateMode: AutovalidateMode.onUserInteraction,
             key: _fbKey,
-            child: Builder(
-              builder: (context) {
-                return SizedBox(
-                  width: sysWidth,
-                  height: sysHeight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 15, right: 15),
-                    child: Center(
-                      child: ListView(
-                        children: [
-                          Image.asset(
-                            "assets/images/logo.png",
-                            height: sysWidth / 100 * 30,
-                          ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.only(bottom: 24),
+                children: [
+                  Image.asset(
+                    "assets/images/logo.png",
+                    height: sysWidth * 0.25,
+                  ),
                           const SizedBox(height: 40),
                           Align(
                             alignment: Alignment.center,
@@ -205,12 +206,12 @@ class _SignupScreenState extends State<SignupScreen1> {
                             keyboardType: TextInputType.text,
                             autofocus: false,
                             controller: _txtNicController,
-                            validator: (value) => value!.isEmpty
-                                ? 'Enter Your NIC No'
-                                : (RegExp(r'[!@#<>?":_`~;[\]\\|=+)]'))
-                                        .hasMatch(value)
-                                    ? 'Enter a Valid NIC No'
-                                    : null,
+                            validator: (value) =>
+                                value == null || value.trim().isEmpty
+                                    ? 'Enter Your NIC No'
+                                    : UserDataUtil.isValidNic(value)
+                                        ? null
+                                        : 'Enter a Valid NIC No',
                             decoration: InputDecoration(
                               labelText: "NIC".tr(),
                               labelStyle: hintTextStyle,
@@ -288,7 +289,8 @@ class _SignupScreenState extends State<SignupScreen1> {
                                         builder: (context) => SignupScreen2(
                                             _txtFNameController.text,
                                             _txtLNameController.text,
-                                            _txtNicController.text,
+                                            UserDataUtil.normalizeNic(
+                                                _txtNicController.text),
                                             _txtMobNoController.text,
                                             _txtEmailController.text,
                                             _imageFile!.path.toString()),
@@ -348,72 +350,57 @@ class _SignupScreenState extends State<SignupScreen1> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 40),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
+                  const SizedBox(height: 40),
+                ],
+              ),
             )),
       ),
     );
   }
 
-  Widget bottomSheet() {
-    return Container(
-      height: 100.0,
-      width: MediaQuery.of(context).size.width,
+  Widget bottomSheet(BuildContext sheetContext) {
+    final bottomInset = MediaQuery.of(sheetContext).viewPadding.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(24, 24, 24, bottomInset + 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _photoSheetOption(
+            icon: Icons.camera_alt,
+            label: "Camera",
+            onTap: () => takePhoto(ImageSource.camera),
+          ),
+          const SizedBox(height: 16),
+          _photoSheetOption(
+            icon: Icons.image,
+            label: "Gallery",
+            onTap: () => takePhoto(ImageSource.gallery),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _photoSheetOption({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.only(left: 15),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            InkWell(
-              onTap: () {
-                takePhoto(ImageSource.camera);
-              },
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.camera_alt,
-                    color: IconColor2,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 10),
-                    child: Text(
-                      "Camera",
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: IconColor2,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            InkWell(
-              onTap: () {
-                takePhoto(ImageSource.gallery);
-              },
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.image,
-                    color: IconColor2,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 10),
-                    child: Text(
-                      "Gallery",
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: IconColor2,
-                      ),
-                    ),
-                  ),
-                ],
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Icon(icon, color: IconColor2, size: 26),
+            const SizedBox(width: 14),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: IconColor2,
               ),
             ),
           ],
@@ -423,6 +410,7 @@ class _SignupScreenState extends State<SignupScreen1> {
   }
 
   void takePhoto(ImageSource source) async {
+    Navigator.of(context).pop();
     final pickedFile = await _picker.pickImage(
       source: source,
     );
