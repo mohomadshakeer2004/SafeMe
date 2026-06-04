@@ -135,14 +135,10 @@ class FirebaseService {
 
   static const Duration rtdbTimeout = Duration(seconds: 45);
 
-  /// Re-authenticates when the Firebase session expired (RTDB writes need auth).
+  /// Ensures any Firebase Auth session exists (RTDB rules: auth != null).
   Future<void> ensureAuthenticatedForWrite() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null && user.email == firebaseAuthEmail) {
+    if (FirebaseAuth.instance.currentUser != null) {
       return;
-    }
-    if (user != null) {
-      await signOut();
     }
     await signInAsAdmin().timeout(
       rtdbTimeout,
@@ -269,6 +265,103 @@ class FirebaseService {
     }
 
     await _writeComplaintsComplaintCount(newCount);
+  }
+
+  static const String _localSafeMeSidKey = 'local_safeme_last_sid';
+
+  Future<int> _readSafeMeCounter(String path) async {
+    try {
+      final event = await rootRef
+          .child(path)
+          .once()
+          .timeout(const Duration(seconds: 15));
+      return _parseCounter(event.snapshot.value);
+    } catch (e) {
+      print('_readSafeMeCounter: SDK once $path failed ($e), REST…');
+    }
+
+    try {
+      final raw = await RtdbRestService.instance
+          .get(path)
+          .timeout(const Duration(seconds: 12));
+      return _parseCounter(raw);
+    } catch (e) {
+      print('_readSafeMeCounter: REST $path failed ($e)');
+      return 0;
+    }
+  }
+
+  /// Reads [SafeMe/LastSID] and returns that value + 1.
+  Future<int> allocateNextSafeMeId() async {
+    await ensureAuthenticatedForWrite();
+    final prefs = await SharedPreferences.getInstance();
+
+    var last = await _readSafeMeCounter('SafeMe/LastSID');
+    final local = prefs.getInt(_localSafeMeSidKey) ?? 0;
+    if (local > last) {
+      last = local;
+    }
+
+    final next = last + 1;
+    await prefs.setInt(_localSafeMeSidKey, next);
+    print('allocateNextSafeMeId: SafeMe/LastSID=$last → SID=$next');
+    return next;
+  }
+
+  Future<void> saveSafeMeAlert({
+    required int sid,
+    required Map<String, dynamic> data,
+  }) async {
+    await ensureAuthenticatedForWrite();
+    final path = 'SafeMe/All/$sid';
+
+    try {
+      await rootRef.child(path).set(data).timeout(const Duration(seconds: 30));
+      print('saveSafeMeAlert: SDK OK $path');
+      return;
+    } catch (e) {
+      print('saveSafeMeAlert: SDK failed ($e), REST…');
+    }
+
+    await RtdbRestService.instance.put(path, data);
+    print('saveSafeMeAlert: REST OK $path');
+  }
+
+  /// Updates [SafeMe/LastSID], [PendingCount], and [TotalCount] (SDK first).
+  Future<void> syncSafeMeCounters(int newSid) async {
+    await ensureAuthenticatedForWrite();
+
+    final pending = await _readSafeMeCounter('SafeMe/PendingCount');
+    final total = await _readSafeMeCounter('SafeMe/TotalCount');
+    final newPending = pending + 1;
+    final newTotal = total + 1;
+    print(
+      'syncSafeMeCounters: LastSID=$newSid, '
+      'PendingCount $pending→$newPending, TotalCount $total→$newTotal',
+    );
+
+    try {
+      await rootRef.child('SafeMe').update({
+        'LastSID': newSid,
+        'PendingCount': newPending,
+        'TotalCount': newTotal,
+      }).timeout(const Duration(seconds: 30));
+      print('syncSafeMeCounters: SDK update OK');
+      return;
+    } catch (e) {
+      print('syncSafeMeCounters: SDK failed ($e), REST…');
+    }
+
+    try {
+      await RtdbRestService.instance.patch('SafeMe', {
+        'LastSID': newSid,
+        'PendingCount': newPending,
+        'TotalCount': newTotal,
+      });
+      print('syncSafeMeCounters: REST patch OK');
+    } catch (e) {
+      print('syncSafeMeCounters: REST failed ($e)');
+    }
   }
 
   Future<void> ensureAuthenticated() async {

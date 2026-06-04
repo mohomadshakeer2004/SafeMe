@@ -53,6 +53,14 @@ In [Google Cloud Console](https://console.cloud.google.com/) → **Credentials**
 
 If complaint submit times out, the app now also writes via HTTPS REST; errors in logcat will mention the key above.
 
+If logcat shows `securetoken.googleapis.com … GrantToken are blocked`:
+
+1. Google Cloud → **Credentials** → mobile API key `AIzaSyCXmkvy…`
+2. **API restrictions**: enable **Identity Toolkit API** (Firebase Auth)
+3. Do not block OAuth token / Secure Token endpoints for the Android app
+
+SafeMe shake uses the Firebase SDK first (cached auth token); REST is fallback only.
+
 ## 5. Fix `API key expired`
 
 If logcat shows:

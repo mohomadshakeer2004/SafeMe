@@ -38,11 +38,15 @@ class HomeShakeService {
     });
   }
 
+  /// Stops accelerometer only — keeps [onTripleShake] so home tab can resume listening.
   void stop() {
     _listenGeneration++;
     _subscription?.cancel();
     _subscription = null;
     _shakeCount = 0;
+  }
+
+  void clearHandler() {
     onTripleShake = null;
   }
 

@@ -1,8 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
@@ -117,9 +116,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onTripleShake() {
     if (!mounted) return;
+    unawaited(_runShakeSafeMe());
+  }
+
+  Future<void> _runShakeSafeMe() async {
     print(
         '*************************ShakeDetector Start*****************************');
-    submitSafeMe(
+
+    final sessionOk = await UserService().checkSession();
+    if (!sessionOk) {
+      EasyLoading.showError('Please log in again');
+      return;
+    }
+
+    if (userData.isEmpty) {
+      await getUserData();
+    }
+
+    await submitSafeMe(
       UserDataUtil.field(userData, 'Address'),
       DateTime.now(),
       UserDataUtil.field(userData, 'Email'),
@@ -140,10 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    final shake = HomeShakeService.instance;
-    if (shake.onTripleShake == _onTripleShake) {
-      shake.onTripleShake = null;
-    }
+    HomeShakeService.instance.clearHandler();
     _txtLocation.dispose();
     super.dispose();
   }
@@ -591,7 +602,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<bool?> submitSafeMe(
+  Future<bool> submitSafeMe(
     String Address,
     DateTime Date,
     String Email,
@@ -602,74 +613,46 @@ class _HomeScreenState extends State<HomeScreen> {
     String Name,
     String ProfileImage,
   ) async {
-    print("//////////////////////////////////////////////////////////////");
-    final databaseRef = FirebaseService.instance.rootRef;
-    FirebaseStorage storage = FirebaseStorage.instance;
     EasyLoading.show(status: "Submitting...");
+    try {
+      final firebase = FirebaseService.instance;
+      final sid = await firebase.allocateNextSafeMeId();
+      print('shake submitSafeMe: SID=$sid');
 
-    ///Get Last safeme ID -1st Step
+      final data = {
+        'SID': sid,
+        'Address': Address,
+        'AudioMP3': '',
+        'City': UserDataUtil.field(userData, 'City'),
+        'Date': Date.toString(),
+        'District': UserDataUtil.field(userData, 'District'),
+        'Email': Email,
+        'Image1': '',
+        'Image2': '',
+        'Image3': '',
+        'Image4': '',
+        'Image5': '',
+        'Latitude': Latitude,
+        'Longitude': Longitude,
+        'Mobile': Mobile,
+        'NIC': UserDataUtil.normalizeNic(NIC),
+        'Name': Name,
+        'ProfileImage': ProfileImage,
+        'Severity': 'Medium',
+        'Status': 'Alert Sent',
+      };
 
-    var get_SID = databaseRef.child("/SafeMe/LastSID");
-    DatabaseEvent event = await get_SID.once();
-    int SID = (event.snapshot.value).hashCode + 1;
-    print("************ Complaint ID = $SID**************");
+      await firebase.saveSafeMeAlert(sid: sid, data: data);
+      await firebase.syncSafeMeCounters(sid);
 
-    if (SID != null) {
-      try {
-        print("************Get Complaint ID = $SID");
-
-        var data = {
-          "SID": SID,
-          "Address": Address,
-          "AudioMP3": "",
-          "City": "Veyangoda",
-          "Date": Date.toString(),
-          "District": "",
-          "Email": Email,
-          "Image1": "",
-          "Image2": "",
-          "Image3": "",
-          "Image4": "",
-          "Image5": "",
-          "Latitude": Longitude,
-          "Longitude": Latitude,
-          "Mobile": Mobile,
-          "NIC": NIC,
-          "Name": Name,
-          "ProfileImage": ProfileImage,
-          "Severity": "Medium",
-          "Status": "Alert Sent"
-        };
-
-        ///Save SafeMe - 2nd Step
-
-        databaseRef.child("/SafeMe/All/").child("$SID").set(data);
-        print("**************Save SafeMe response ");
-
-        ///Update Last SafeMe ID
-        databaseRef.child("/SafeMe/").update({'LastSID': SID});
-
-        ///Update SafeMe Count
-        var getSafeMeCount = databaseRef.child("/SafeMe/PendingCount");
-        DatabaseEvent event = await getSafeMeCount.once();
-        print(event.snapshot.value);
-        int SafeMe_PCount = (event.snapshot.value).hashCode + 1;
-        databaseRef.child("/SafeMe/").update({'PendingCount': SafeMe_PCount});
-
-        ///Update SafeMe Total Count
-        var getSafeMeTotalCount = databaseRef.child("/SafeMe/TotalCount");
-        DatabaseEvent eventT = await getSafeMeTotalCount.once();
-        print(eventT.snapshot.value);
-        int SafeMe_ToCount = (eventT.snapshot.value).hashCode + 1;
-        databaseRef.child("/SafeMe/").update({'TotalCount': SafeMe_ToCount});
-
-        EasyLoading.dismiss();
-
-        return true;
-      } catch (e) {
-        print(e);
-        return false;
-      }
+      EasyLoading.showSuccess('SafeMe alert sent!');
+      return true;
+    } catch (e) {
+      print('shake submitSafeMe failed: $e');
+      EasyLoading.showError('SafeMe alert failed');
+      return false;
+    } finally {
+      EasyLoading.dismiss();
     }
   }
 }

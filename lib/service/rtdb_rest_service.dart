@@ -32,7 +32,12 @@ class RtdbRestService {
     if (user == null) {
       throw StateError('Not signed in to Firebase.');
     }
-    final token = await user.getIdToken(true);
+    // Cached token first — getIdToken(true) hits securetoken.googleapis.com
+    // and fails when the API key blocks Identity Toolkit / GrantToken.
+    var token = await user.getIdToken(false);
+    if (token == null || token.isEmpty) {
+      token = await user.getIdToken(true);
+    }
     if (token == null || token.isEmpty) {
       throw StateError('Could not get Firebase auth token.');
     }

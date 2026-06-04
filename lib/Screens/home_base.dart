@@ -56,6 +56,7 @@ class _HomeBaseState extends State<HomeBase> {
   @override
   void dispose() {
     HomeShakeService.instance.stop();
+    HomeShakeService.instance.clearHandler();
     EmergencyAudioService.instance.stop();
     super.dispose();
   }

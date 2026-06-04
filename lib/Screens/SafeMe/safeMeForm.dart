@@ -800,17 +800,8 @@ class _SafeMeFormState extends State<SafeMeForm> {
     final timeout = FirebaseService.rtdbTimeout;
 
     try {
-      await firebase.ensureAuthenticatedForWrite();
-      final databaseRef = firebase.rootRef;
-
-      final sidSnap = await databaseRef
-          .child('SafeMe/LastSID')
-          .get()
-          .timeout(timeout);
-      var sid = int.tryParse('${sidSnap.value}') ?? 0;
-      sid++;
-
-      print("************ SafeMe ID = $sid**************");
+      final sid = await firebase.allocateNextSafeMeId();
+      print('************ SafeMe ID = $sid **************');
 
       final data = {
         "SID": sid,
@@ -835,39 +826,13 @@ class _SafeMeFormState extends State<SafeMeForm> {
         "Status": "Alert Sent",
       };
 
-      await databaseRef
-          .child("/SafeMe/All/$sid")
-          .set(data)
-          .timeout(timeout);
-      print("**************Save SafeMe response ");
+      await firebase.saveSafeMeAlert(sid: sid, data: data);
+      print('**************Save SafeMe response ');
 
-      await databaseRef
-          .child("/SafeMe/LastSID")
-          .set(sid)
-          .timeout(timeout);
-
-      final pendingEvent = await databaseRef
-          .child("/SafeMe/PendingCount")
-          .once()
-          .timeout(timeout);
-      final pending = int.tryParse('${pendingEvent.snapshot.value}') ?? 0;
-      await databaseRef
-          .child("/SafeMe/PendingCount")
-          .set(pending + 1)
-          .timeout(timeout);
-
-      final totalEvent = await databaseRef
-          .child("/SafeMe/TotalCount")
-          .once()
-          .timeout(timeout);
-      final total = int.tryParse('${totalEvent.snapshot.value}') ?? 0;
-      await databaseRef
-          .child("/SafeMe/TotalCount")
-          .set(total + 1)
-          .timeout(timeout);
+      await firebase.syncSafeMeCounters(sid);
 
       _uploadSafeMeImages(
-        databaseRef,
+        firebase.rootRef,
         sid,
         Image1,
         Image2,
@@ -876,7 +841,7 @@ class _SafeMeFormState extends State<SafeMeForm> {
         Image5,
       );
       if (_audioFile != null) {
-        _uploadSafeMeAudio(databaseRef, sid, _audioFile!);
+        _uploadSafeMeAudio(firebase.rootRef, sid, _audioFile!);
       }
 
       return true;
