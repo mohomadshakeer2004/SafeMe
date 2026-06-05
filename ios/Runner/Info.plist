@@ -68,5 +68,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SafeMe needs microphone access to record emergency voice evidence.</string>
 </dict>
 </plist>

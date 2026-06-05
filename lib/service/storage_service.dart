@@ -16,10 +16,19 @@ class StorageService {
   static Future<String?> uploadFile({
     required String storagePath,
     required File file,
+    String? contentType,
+    Duration? timeout,
   }) async {
     try {
       final ref = FirebaseStorage.instance.ref().child(storagePath);
-      await ref.putFile(file).timeout(uploadTimeout);
+      final uploadTimeout = timeout ?? StorageService.uploadTimeout;
+      if (contentType != null) {
+        await ref
+            .putFile(file, SettableMetadata(contentType: contentType))
+            .timeout(uploadTimeout);
+      } else {
+        await ref.putFile(file).timeout(uploadTimeout);
+      }
       return await ref.getDownloadURL().timeout(const Duration(seconds: 8));
     } on TimeoutException {
       print('Storage upload timed out ($storagePath)');

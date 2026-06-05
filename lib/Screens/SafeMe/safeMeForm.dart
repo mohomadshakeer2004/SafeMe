@@ -100,7 +100,21 @@ class _SafeMeFormState extends State<SafeMeForm> {
   }
 
   Future<void> record() async {
-    if (!isRecorderReady || isRecording) return;
+    if (isRecording) return;
+    if (!isRecorderReady) {
+      await initRecorder();
+      if (!isRecorderReady) {
+        if (mounted) {
+          MotionToast.error(
+            title: const Text('Error'),
+            description: const Text('Microphone permission is required'),
+            animationType: AnimationType.slideInFromLeft,
+            toastAlignment: Alignment.topCenter,
+          ).show(context);
+        }
+        return;
+      }
+    }
     try {
       final dir = await getTemporaryDirectory();
       _audioRecordPath =
@@ -831,7 +845,7 @@ class _SafeMeFormState extends State<SafeMeForm> {
 
       await firebase.syncSafeMeCounters(sid);
 
-      _uploadSafeMeImages(
+      await _uploadSafeMeImages(
         firebase.rootRef,
         sid,
         Image1,
@@ -841,7 +855,7 @@ class _SafeMeFormState extends State<SafeMeForm> {
         Image5,
       );
       if (_audioFile != null) {
-        _uploadSafeMeAudio(firebase.rootRef, sid, _audioFile!);
+        await _uploadSafeMeAudio(firebase.rootRef, sid, _audioFile!);
       }
 
       return true;
@@ -892,15 +906,21 @@ class _SafeMeFormState extends State<SafeMeForm> {
   ) async {
     try {
       final url = await StorageService.uploadFile(
-        storagePath: 'safeme audio/$sid',
+        storagePath: 'safeme audio/$sid.aac',
         file: audioFile,
+        contentType: 'audio/aac',
+        timeout: const Duration(seconds: 30),
       );
-      if (url == null) return;
+      if (url == null) {
+        debugPrint('SafeMe audio upload returned no URL for SID $sid');
+        return;
+      }
 
       await databaseRef
           .child('SafeMe/All/$sid')
           .update({'AudioMP3': url})
           .timeout(FirebaseService.rtdbTimeout);
+      debugPrint('SafeMe audio saved: SafeMe/All/$sid AudioMP3=$url');
     } catch (e) {
       debugPrint('SafeMe audio upload failed: $e');
     }
