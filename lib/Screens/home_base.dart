@@ -76,25 +76,41 @@ class _HomeBaseState extends State<HomeBase> {
             ProfileScreen(),
           ],
         ),
-        backgroundColor: mainBGColor,
-        bottomNavigationBar: BottomNavigationBar(
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(FontAwesomeIcons.bars),
-              label: '',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(
-                FontAwesomeIcons.user,
+        backgroundColor: appSurface,
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: appSurfaceElevated,
+            border: Border(top: BorderSide(color: appBorder)),
+            boxShadow: [
+              BoxShadow(
+                color: secondary.withValues(alpha: 0.06),
+                blurRadius: 12,
+                offset: const Offset(0, -2),
               ),
-              label: '',
-            ),
-          ],
-          currentIndex: selectedpage,
-          selectedItemColor: secondary,
-          unselectedItemColor: IconColor2,
-          iconSize: 20,
-          onTap: _onItemTapped,
+            ],
+          ),
+          child: BottomNavigationBar(
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(FontAwesomeIcons.bars),
+                label: '',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(
+                  FontAwesomeIcons.user,
+                ),
+                label: '',
+              ),
+            ],
+            currentIndex: selectedpage,
+            selectedItemColor: secondary,
+            unselectedItemColor: appTextSubtle,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            type: BottomNavigationBarType.fixed,
+            iconSize: 20,
+            onTap: _onItemTapped,
+          ),
         ),
       ),
     );

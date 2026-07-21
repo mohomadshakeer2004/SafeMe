@@ -28,3 +28,13 @@ final drawerColor = Color(0xFF525252);
 final  textColor_1 = Color(0xFF000000);
 final  textColor_2 = Color(0xffe3e2e2);
 final  textColor_3 = Color(0xFFFFFFFF);
+
+// Shared UI palette (government / safety app)
+final appSurface = Color(0xFFF4F7FB);
+final appSurfaceElevated = Color(0xFFFFFFFF);
+final appBorder = Color(0xFFE2E8F0);
+final appTextMuted = Color(0xFF64748B);
+final appTextSubtle = Color(0xFF94A3B8);
+final emergencyPrimary = Color(0xFFB71C1C);
+final emergencySecondary = Color(0xFFD32F2F);
+final appAccent = boxLineColor;

@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:flutter_phone_direct_caller/flutter_phone_direct_caller.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:safe_me/data/police_stations.dart';
 import 'package:safe_me/service/firebase_service.dart';
 import 'package:safe_me/service/userService.dart';
 import 'package:safe_me/util/user_data_util.dart';
@@ -16,11 +16,8 @@ import '../Screens/EmergencyContact/emergencyContact.dart';
 import '../Screens/LostAndFound/lost_Found.dart';
 import '../Screens/PoliceMap/policeMap.dart';
 import '../Resources/colors.dart';
-import '../Resources/style.dart';
 import '../widgets/drawer.dart';
 import 'Appoinment/appointment_base.dart';
-import 'Emergency/emergency.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:safe_me/service/home_shake_service.dart';
 import 'SafeMe/safeMeBase.dart';
 
@@ -32,21 +29,22 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String mytext = "Martini?";
   Map<String, dynamic> userData = {};
   Position _position = Position(
-      longitude: 0,
-      latitude: 0,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(0),
-      accuracy: 0,
-      altitude: 0,
-      altitudeAccuracy: 0,
-      heading: 0,
-      headingAccuracy: 0,
-      speed: 0,
-      speedAccuracy: 0);
+    longitude: 0,
+    latitude: 0,
+    timestamp: DateTime.fromMillisecondsSinceEpoch(0),
+    accuracy: 0,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
-  TextEditingController _txtLocation = TextEditingController();
+  bool _locationReady = false;
+  List<NearestPoliceStation> _nearestStations = [];
 
   getUserData() async {
     final nic = await UserService().requireLoggedInNic();
@@ -92,8 +90,12 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _position = positionCur;
-        _txtLocation.text =
-            "${positionCur.latitude.toStringAsFixed(7)} , ${positionCur.longitude.toStringAsFixed(7)}";
+        _locationReady = true;
+        _nearestStations = PoliceStationsData.findNearest(
+          positionCur.latitude,
+          positionCur.longitude,
+          count: 3,
+        );
       });
     } catch (e) {
       debugPrint('Location unavailable: $e');
@@ -155,450 +157,544 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     HomeShakeService.instance.clearHandler();
-    _txtLocation.dispose();
     super.dispose();
+  }
+
+  String get _userName {
+    final name = UserDataUtil.field(userData, 'Name');
+    if (name.isEmpty) return '';
+    return name.split(' ').first;
+  }
+
+  void _openPoliceMap() {
+    final hasLocation = _locationReady &&
+        _position.latitude != 0 &&
+        _position.longitude != 0;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PoliceMap(
+          initialLatitude: hasLocation ? _position.latitude : null,
+          initialLongitude: hasLocation ? _position.longitude : null,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    double sysHeight = MediaQuery.of(context).size.height;
-    double sysWidth = MediaQuery.of(context).size.width;
+    final sysWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
-      backgroundColor: Color(0xffc0bfbf),
-      // appBar: AppBar(
-      //   elevation: 0,
-      //   backgroundColor: Color(0xfff0f1f5),
-      //   leading: Builder(
-      //     builder: (BuildContext context) {
-      //       return IconButton(
-      //         icon: SvgPicture.asset(
-      //           "assets/icons/menu.svg",
-      //           height: sysWidth / 100 * 8,
-      //           color: secondary,
-      //         ),
-      //         onPressed: () {
-      //           Scaffold.of(context).openDrawer();
-      //         },
-      //         tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
-      //       );
-      //     },
-      //   ),
-      // ),
+      backgroundColor: appSurface,
       drawer: Drawer(
         child: DrawerWidget(),
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage("assets/images/bg1.jpg"),
-            fit: BoxFit.cover,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildHeader(sysWidth),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildEmergencyCard(),
+                  const SizedBox(height: 16),
+                  _buildLocationCard(),
+                  const SizedBox(height: 22),
+                  _buildSectionTitle('Citizen_Services'.tr()),
+                  const SizedBox(height: 14),
+                  _buildServicesGrid(sysWidth),
+                ],
+              ),
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(double sysWidth) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            secondary,
+            Color.lerp(secondary, const Color(0xFF061525), 0.4)!,
+          ],
         ),
-        // color: Color(0xfff0f1f5),
-        height: sysHeight,
-        width: sysWidth,
+        border: Border(
+          bottom: BorderSide(color: appAccent.withValues(alpha: 0.85), width: 3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: secondary.withValues(alpha: 0.28),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        bottom: false,
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(4, 8, 16, 18),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  InkWell(
-                    onTap: () {
-                      // launch('tel:0779873552');
-
-                      const number = '1119'; //set the number here
-                      FlutterPhoneDirectCaller.callNumber(number);
-                    },
-                    child: Container(
-                      height: sysHeight / 6 * 1,
-                      width: sysWidth - 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white, // Color(0xfffdc2c2),
-                        borderRadius: BorderRadius.circular(20),
-                        //border: Border.all(width: 1,color: Colors.red),
-                        // boxShadow: const [
-                        //   BoxShadow(
-                        //     blurRadius: 1,
-                        //     color: Colors.black45,
-                        //   )
-                        // ]
+                  Builder(
+                    builder: (context) => IconButton(
+                      icon: SvgPicture.asset(
+                        'assets/icons/menu.svg',
+                        height: 22,
+                        colorFilter: const ColorFilter.mode(
+                          Colors.white,
+                          BlendMode.srcIn,
+                        ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                      onPressed: () => Scaffold.of(context).openDrawer(),
+                      tooltip:
+                          MaterialLocalizations.of(context).openAppDrawerTooltip,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        height: 38,
+                        width: 38,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.shield_outlined,
+                          color: Colors.white.withValues(alpha: 0.95),
+                          size: 34,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'SafeMe',
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.bold,
+                            color: normalTextColor,
+                            fontFamily: 'Poppins-Bold',
+                            letterSpacing: 0.4,
+                            height: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '119_Emergency'.tr(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white.withValues(alpha: 0.72),
+                            fontFamily: 'Poppins-Light',
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (_userName.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.14),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.verified_user_outlined,
+                        size: 16,
+                        color: appAccent.withValues(alpha: 0.95),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${'Hello'.tr().split('\n').first}, $_userName',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withValues(alpha: 0.92),
+                          fontFamily: 'Poppins-Regular',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmergencyCard() {
+    return Material(
+      color: Colors.transparent,
+      elevation: 0,
+      borderRadius: BorderRadius.circular(_HomeUi.radius),
+      child: InkWell(
+        onTap: () {
+          const number = '1119';
+          FlutterPhoneDirectCaller.callNumber(number);
+        },
+        borderRadius: BorderRadius.circular(_HomeUi.radius),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [emergencyPrimary, emergencySecondary],
+            ),
+            borderRadius: BorderRadius.circular(_HomeUi.radius),
+            boxShadow: [
+              BoxShadow(
+                color: emergencySecondary.withValues(alpha: 0.32),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -18,
+                top: -18,
+                child: Icon(
+                  Icons.local_police_rounded,
+                  size: 110,
+                  color: Colors.white.withValues(alpha: 0.07),
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(13),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.22),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.phone_in_talk_rounded,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            //direction: Axis.vertical, //Vertical || Horizontal
-                            children: <Widget>[
-                              const Text(
-                                "119",
-                                style: TextStyle(
-                                  fontSize: 38,
-                                  color: Color(0xffff0000),
-                                  letterSpacing: 8,
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: 'ARLRDBD',
-                                ),
-                              ),
-                              Text(
-                                "Emergency".tr(),
-                                style: const TextStyle(
-                                    fontSize: 24,
-                                    // height: 0.5,
-                                    color: Color(0xffff0000),
-                                    fontWeight: FontWeight.bold,
-                                    fontFamily: 'ARLRDBD'),
-                              ),
-                            ],
+                          const Text(
+                            '119',
+                            style: TextStyle(
+                              fontSize: 34,
+                              color: Colors.white,
+                              letterSpacing: 5,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'ARLRDBD',
+                              height: 1,
+                            ),
                           ),
-                          Image.asset(
-                            "assets/images/ringing.gif",
-                            height: 60,
-                            // color: iconColor,
+                          Text(
+                            'Emergency'.tr(),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Poppins-Bold',
+                            ),
                           ),
-                          // Icon(
-                          //   Icons.call,
-                          //   color: Color(0xffff0000),
-                          //   size: 50,
-                          // ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Call_119'.tr(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.white.withValues(alpha: 0.88),
+                              fontFamily: 'Poppins-Light',
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ),
-                ],
-              ),
-              SizedBox(
-                height: 20,
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  InkWell(
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => const ComplaintHome()));
-                    },
-                    child: Container(
-                      height: sysHeight / 6 * 1,
-                      width: sysWidth / 3 * 1.3,
-                      decoration: BoxDecoration(
-                        // image: DecorationImage(
-                        //   image: AssetImage("assets/images/aa.jpg"),
-                        //   fit: BoxFit.cover,
-                        //   colorFilter: new ColorFilter.mode(
-                        //       Colors.black.withOpacity(1), BlendMode.dstATop),
-                        // ),
+                    Image.asset(
+                      'assets/images/ringing.gif',
+                      height: 48,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.ring_volume_rounded,
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        // border: Border.all(color: Colors.black12)
-                        // boxShadow: const [
-                        //   BoxShadow(blurRadius: 0, color: Colors.black45)
-                        // ]
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          // crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "Complaint".tr(),
-                                  style: mainTilsTextStyle,
-                                ),
-                              ],
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Image.asset(
-                                  "assets/icons/complaint.png",
-                                  height: sysWidth / 100 * 10,
-                                  color: secondary,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                        size: 36,
                       ),
                     ),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => const SafeMeBase()));
-                    },
-                    child: Container(
-                      height: sysHeight / 6 * 1,
-                      width: sysWidth / 3 * 1.3,
-                      decoration: BoxDecoration(
-                        // image: DecorationImage(
-                        //   image: AssetImage("assets/images/2.jpg"),
-                        //   fit: BoxFit.cover,
-                        //   colorFilter: new ColorFilter.mode(
-                        //       Colors.black.withOpacity(0.5),
-                        //       BlendMode.dstATop),
-                        // ),
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        // border: Border.all(color: Colors.black12)
-                        // boxShadow: const [
-                        //   BoxShadow(blurRadius: 0, color: Colors.black45)
-                        // ]
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          //crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "Safe_Me".tr(),
-                                  style: mainTilsTextStyle,
-                                ),
-                              ],
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Image.asset(
-                                  "assets/icons/safe.png",
-                                  height: sysWidth / 100 * 10,
-                                  color: secondary,
-                                ),
-                              ],
-                            ),
-
-                            // Icon(FontAwesomeIcons.microphoneLines,
-                            //     size: 45, color: buttonColor),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(
-                height: 20,
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  InkWell(
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => const AppointmentBase()));
-                    },
-                    child: Container(
-                      height: sysHeight / 6 * 1,
-                      width: sysWidth / 3 * 1.3,
-                      decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: const [
-                            // BoxShadow(blurRadius: 1, color: Colors.black45)
-                          ]),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          // crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "Appointment".tr(),
-                                  style: mainTilsTextStyle,
-                                ),
-                              ],
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Image.asset(
-                                  "assets/icons/appointment.png",
-                                  height: sysWidth / 100 * 10,
-                                  color: secondary,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => const PoliceMap()));
-                    },
-                    child: Container(
-                      height: sysHeight / 6 * 1,
-                      width: sysWidth / 3 * 1.3,
-                      decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: const [
-                            // BoxShadow(blurRadius: 1, color: Colors.black45)
-                          ]),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          //crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "Police_Map".tr(),
-                                  style: mainTilsTextStyle,
-                                ),
-                              ],
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Image.asset(
-                                  "assets/icons/nearest.png",
-                                  height: sysWidth / 100 * 10,
-                                  color: secondary,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(
-                height: 20,
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  InkWell(
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => const LostFoundItem()));
-                    },
-                    child: Container(
-                      height: sysHeight / 6 * 1,
-                      width: sysWidth / 3 * 1.3,
-                      decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: const [
-                            // BoxShadow(blurRadius: 1, color: Colors.black45)
-                          ]),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          // crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "Lost_Found".tr(),
-                                  style: mainTilsTextStyle,
-                                ),
-                              ],
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Image.asset(
-                                  "assets/icons/lost_found.png",
-                                  height: sysWidth / 100 * 10,
-                                  color: secondary,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => const EmergencyContact()));
-                    },
-                    child: Container(
-                      height: sysHeight / 6 * 1,
-                      width: sysWidth / 3 * 1.3,
-                      decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: const [
-                            // BoxShadow(blurRadius: 1, color: Colors.black45)
-                          ]),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          //crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "Contact".tr(),
-                                  style: mainTilsTextStyle,
-                                ),
-                              ],
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Image.asset(
-                                  "assets/icons/contact.png",
-                                  height: sysWidth / 100 * 10,
-                                  color: secondary,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(
-                height: 20,
+                  ],
+                ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildLocationCard() {
+    final hasLocation = _locationReady &&
+        _position.latitude != 0 &&
+        _position.longitude != 0;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _openPoliceMap,
+        borderRadius: BorderRadius.circular(_HomeUi.radius),
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: _HomeUi.cardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                color: secondary.withValues(alpha: 0.04),
+                child: Row(
+                  children: [
+                    _HomeUi.iconBadge(
+                      icon: Icons.my_location_rounded,
+                      color: secondary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Your_Location'.tr(),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: secondary,
+                              fontFamily: 'Poppins-Bold',
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            hasLocation
+                                ? '${_position.latitude.toStringAsFixed(5)}, ${_position.longitude.toStringAsFixed(5)}'
+                                : 'Locating'.tr(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: hasLocation
+                                  ? appTextMuted
+                                  : appTextSubtle,
+                              fontFamily: 'Poppins-Light',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        Icons.refresh_rounded,
+                        color: secondary.withValues(alpha: 0.65),
+                        size: 20,
+                      ),
+                      onPressed: getCurrLocation,
+                      tooltip: 'Refresh'.tr(),
+                    ),
+                    Icon(
+                      Icons.map_outlined,
+                      color: appAccent.withValues(alpha: 0.9),
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+              if (_nearestStations.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 3,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: appAccent,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Nearest_Police_Stations'.tr(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: secondary,
+                              fontFamily: 'Poppins-Bold',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ...List.generate(_nearestStations.length, (index) {
+                        final station = _nearestStations[index];
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            bottom:
+                                index == _nearestStations.length - 1 ? 0 : 8,
+                          ),
+                          child: _HomeUi.stationRow(
+                            rank: index + 1,
+                            title: station.displayName(index + 1),
+                            distance: station.distanceLabel,
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 20,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [secondary, appAccent],
+            ),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: secondary,
+            fontFamily: 'Poppins-Bold',
+            letterSpacing: 0.2,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildServicesGrid(double sysWidth) {
+    final tileWidth = (sysWidth - 32 - 12) / 2;
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        _ServiceTile(
+          width: tileWidth,
+          label: 'Complaint'.tr(),
+          iconPath: 'assets/icons/complaint.png',
+          accentColor: secondary,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ComplaintHome()),
+          ),
+        ),
+        _ServiceTile(
+          width: tileWidth,
+          label: 'Safe_Me'.tr(),
+          iconPath: 'assets/icons/safe.png',
+          accentColor: emergencyPrimary,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const SafeMeBase()),
+          ),
+        ),
+        _ServiceTile(
+          width: tileWidth,
+          label: 'Appointment'.tr(),
+          iconPath: 'assets/icons/appointment.png',
+          accentColor: secondary,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AppointmentBase()),
+          ),
+        ),
+        _ServiceTile(
+          width: tileWidth,
+          label: 'Police_Map'.tr(),
+          iconPath: 'assets/icons/nearest.png',
+          accentColor: appAccent,
+          onTap: _openPoliceMap,
+        ),
+        _ServiceTile(
+          width: tileWidth,
+          label: 'Lost_Found'.tr(),
+          iconPath: 'assets/icons/lost_found.png',
+          accentColor: secondary,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const LostFoundItem()),
+          ),
+        ),
+        _ServiceTile(
+          width: tileWidth,
+          label: 'Contact'.tr(),
+          iconPath: 'assets/icons/contact.png',
+          accentColor: secondary,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const EmergencyContact()),
+          ),
+        ),
+      ],
     );
   }
 
@@ -654,5 +750,207 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       EasyLoading.dismiss();
     }
+  }
+}
+
+class _HomeUi {
+  static const double radius = 16;
+
+  static BoxDecoration cardDecoration() {
+    return BoxDecoration(
+      color: appSurfaceElevated,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: appBorder),
+      boxShadow: [
+        BoxShadow(
+          color: secondary.withValues(alpha: 0.06),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+  }
+
+  static Widget iconBadge({
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.12)),
+      ),
+      child: Icon(icon, color: color, size: 20),
+    );
+  }
+
+  static Widget stationRow({
+    required int rank,
+    required String title,
+    required String distance,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: appSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: appBorder),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [secondary, Color.lerp(secondary, appAccent, 0.35)!],
+              ),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              '$rank',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Poppins-Bold',
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: secondary,
+                fontFamily: 'Poppins-Bold',
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: appAccent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              distance,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: secondary,
+                fontFamily: 'Poppins-Bold',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ServiceTile extends StatelessWidget {
+  const _ServiceTile({
+    required this.width,
+    required this.label,
+    required this.iconPath,
+    required this.onTap,
+    required this.accentColor,
+  });
+
+  final double width;
+  final String label;
+  final String iconPath;
+  final VoidCallback onTap;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(_HomeUi.radius),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: appSurfaceElevated,
+              borderRadius: BorderRadius.circular(_HomeUi.radius),
+              border: Border.all(color: appBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: secondary.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: accentColor,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(_HomeUi.radius),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(13),
+                        decoration: BoxDecoration(
+                          color: accentColor.withValues(alpha: 0.09),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: accentColor.withValues(alpha: 0.14),
+                          ),
+                        ),
+                        child: Image.asset(
+                          iconPath,
+                          height: 26,
+                          color: accentColor,
+                          errorBuilder: (_, __, ___) => Icon(
+                            Icons.apps_rounded,
+                            color: accentColor,
+                            size: 26,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: secondary,
+                          fontFamily: 'Poppins-Bold',
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

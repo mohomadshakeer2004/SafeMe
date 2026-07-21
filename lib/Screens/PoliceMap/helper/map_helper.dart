@@ -11,6 +11,78 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../map_marker.dart';
 
 class MapHelper {
+  static Future<BitmapDescriptor> createPersonMarker({
+    Color color = const Color(0xFF0C213A),
+    int size = 96,
+  }) async {
+    final pictureRecorder = PictureRecorder();
+    final canvas = Canvas(pictureRecorder);
+    final double radius = size / 2;
+
+    final shadowPaint = Paint()..color = Colors.black.withValues(alpha: 0.2);
+    canvas.drawCircle(Offset(radius, radius + 2), radius * 0.42, shadowPaint);
+
+    final bodyPaint = Paint()..color = color;
+    canvas.drawCircle(Offset(radius, radius * 0.72), radius * 0.22, bodyPaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(radius, radius * 1.18),
+          width: radius * 0.52,
+          height: radius * 0.46,
+        ),
+        const Radius.circular(8),
+      ),
+      bodyPaint,
+    );
+
+    final pinPaint = Paint()..color = color.withValues(alpha: 0.25);
+    canvas.drawCircle(Offset(radius, radius), radius * 0.46, pinPaint);
+
+    final image = await pictureRecorder.endRecording().toImage(size, size);
+    final data = await image.toByteData(format: ImageByteFormat.png);
+    return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
+  }
+
+  static Future<BitmapDescriptor> createNumberedMarker(
+    int number, {
+    Color background = const Color(0xFF0C213A),
+    Color textColor = Colors.white,
+    int size = 88,
+  }) async {
+    final pictureRecorder = PictureRecorder();
+    final canvas = Canvas(pictureRecorder);
+    final double radius = size / 2;
+    final paint = Paint()..color = background;
+
+    canvas.drawCircle(Offset(radius, radius), radius * 0.42, paint);
+
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+    );
+    textPainter.text = TextSpan(
+      text: number.toString(),
+      style: TextStyle(
+        fontSize: radius * 0.55,
+        fontWeight: FontWeight.bold,
+        color: textColor,
+      ),
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        radius - textPainter.width / 2,
+        radius - textPainter.height / 2,
+      ),
+    );
+
+    final image = await pictureRecorder.endRecording().toImage(size, size);
+    final data = await image.toByteData(format: ImageByteFormat.png);
+    return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
+  }
+
   static Future<BitmapDescriptor> getMarkerImageFromUrl(
     String url, {
     int? targetWidth,

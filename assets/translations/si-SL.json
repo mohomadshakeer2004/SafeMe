@@ -70,5 +70,12 @@
   "Save" : "සුරකින්න",
   "ChangePassword": "මුරපදය වෙනස් කරන්න",
   "Profile": "පැතිකඩ",
-  "FulName": "සම්පූර්ණ නම"
+  "FulName": "සම්පූර්ණ නම",
+  "Citizen_Services": "පුරවැසි සේවා",
+  "Your_Location": "ඔබගේ වර්තමාන ස්ථානය",
+  "Locating": "ස්ථානය හඳුනාගනිමින්...",
+  "Refresh": "නැවත යාවත්කාලීන කරන්න",
+  "Nearest_Police_Stations": "ආසන්නතම පොලිස් ස්ථාන",
+  "You_Are_Here": "ඔබ මෙහි සිටී",
+  "Police_Station": "පොලිස් ස්ථානය"
 }

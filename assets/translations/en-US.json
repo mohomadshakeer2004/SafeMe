@@ -70,5 +70,12 @@
   "Save" : "Save",
   "ChangePassword" : "Change Password",
   "Profile" : "Profile",
-  "FulName": "Full Name"
+  "FulName": "Full Name",
+  "Citizen_Services": "Citizen Services",
+  "Your_Location": "Your Current Location",
+  "Locating": "Detecting location...",
+  "Refresh": "Refresh",
+  "Nearest_Police_Stations": "Nearest Police Stations",
+  "You_Are_Here": "You are here",
+  "Police_Station": "Police Station"
 }
