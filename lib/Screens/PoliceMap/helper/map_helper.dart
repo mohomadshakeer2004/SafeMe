@@ -182,6 +182,7 @@ class MapHelper {
           MapMarker(
         id: cluster!.id.toString(),
         position: LatLng(lat!, lng!),
+        policeStationName: '',
         isCluster: cluster.isCluster,
         clusterId: cluster.id,
         pointsSize: cluster.pointsSize,

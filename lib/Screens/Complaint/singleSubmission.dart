@@ -20,6 +20,7 @@ import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
 import '../../widgets/drawer.dart';
 import 'complaint_base.dart';
+import 'complaint_ui.dart';
 
 class SingleSubmissionScreen extends StatefulWidget {
   const SingleSubmissionScreen(this.CID, this.NIC);
@@ -157,49 +158,17 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
     double sysHeight = MediaQuery.of(context).size.height;
     double sysWidth = MediaQuery.of(context).size.width;
     return Scaffold(
-      backgroundColor: mainBGColor,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: mainBGColor,
-        // iconTheme: IconThemeData(color: iconColor),
-        title: Text(
-          "Description",
-          style: TextStyle(
-              fontSize: 18,
-              color: secondary,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Poppins-Light'),
-        ),
-        leading: Builder(
-          builder: (BuildContext context) {
-            return IconButton(
-              icon: SvgPicture.asset(
-                "assets/icons/menu.svg",
-                height: sysWidth / 100 * 8,
-                color: buttonColor,
-              ),
-              onPressed: () {
-                Scaffold.of(context).openDrawer();
-              },
-              tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
-            );
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              Icons.arrow_back,
-              color: primaryColor,
-              size: 30,
-            ),
-            onPressed: () {
-              Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const ComplaintHome()));
-            },
-          ),
-        ],
+      backgroundColor: appSurface,
+      appBar: ComplaintUi.appBar(
+        context: context,
+        title: 'Description',
+        sysWidth: sysWidth,
+        onBack: () {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const ComplaintHome()),
+          );
+        },
       ),
       drawer: Drawer(
         child: DrawerWidget(),
@@ -216,561 +185,192 @@ class _SingleSubmissionScreenState extends State<SingleSubmissionScreen> {
                 // enablePullUp: true,
                 header: WaterDropMaterialHeader(
                   backgroundColor: secondary,
-                  color: mainBGColor,
+                  color: appSurfaceElevated,
                 ),
                 controller: _refreshController,
                 onRefresh: _onRefresh,
                 child: Padding(
-                  padding: const EdgeInsets.all(8.0),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                   child: SingleChildScrollView(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Container(
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: '',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(3),
+                        ComplaintUi.sectionCard(
+                          title: 'Complaint Summary',
+                          child: Column(
+                            children: [
+                              ComplaintUi.detailRow(
+                                'CID',
+                                UserDataUtil.field(
+                                  complaintData,
+                                  'CID',
+                                  fallback: widget.CID,
+                                ),
                               ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(0),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              ComplaintUi.detailRow(
+                                'District',
+                                UserDataUtil.field(complaintData, 'District'),
+                              ),
+                              ComplaintUi.detailRow(
+                                'City',
+                                UserDataUtil.field(complaintData, 'City'),
+                              ),
+                              ComplaintUi.detailRow(
+                                'Date',
+                                _complaintDateText('yyyy-MM-dd'),
+                              ),
+                              ComplaintUi.detailRow(
+                                'Time',
+                                _complaintDateText('hh:mm a'),
+                              ),
+                              Row(
                                 children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: Column(
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Text(
-                                              "CID : ",
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                                color: textBlackColor,
-                                                fontFamily: 'Poppins-Bold',
-                                              ),
-                                            ),
-                                            Flexible(
-                                              child: Text(
-                                                UserDataUtil.field(
-                                                    complaintData, 'CID',
-                                                    fallback: widget.CID),
-                                                style: TextStyle(
-                                                  fontSize: 15,
-                                                  // fontWeight: FontWeight.bold,
-                                                  color: textBlackColor,
-                                                  fontFamily: 'Poppins-Light',
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        Row(
-                                          children: [
-                                            Text(
-                                              "District : ",
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                                color: textBlackColor,
-                                                fontFamily: 'Poppins-Bold',
-                                              ),
-                                            ),
-                                            Flexible(
-                                              child: Text(
-                                                UserDataUtil.field(
-                                                    complaintData, 'District'),
-                                                style: TextStyle(
-                                                  fontSize: 15,
-                                                  // fontWeight: FontWeight.bold,
-                                                  color: textBlackColor,
-                                                  fontFamily: 'Poppins-Light',
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        Row(
-                                          children: [
-                                            Text(
-                                              "City : ",
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                                color: textBlackColor,
-                                                fontFamily: 'Poppins-Bold',
-                                              ),
-                                            ),
-                                            Flexible(
-                                              child: Text(
-                                                UserDataUtil.field(
-                                                    complaintData, 'City'),
-                                                style: TextStyle(
-                                                  fontSize: 15,
-                                                  // fontWeight: FontWeight.bold,
-                                                  color: textBlackColor,
-                                                  fontFamily: 'Poppins-Light',
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                  SizedBox(
+                                    width: 110,
+                                    child: Text(
+                                      'Status : ',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: secondary,
+                                        fontFamily: 'Poppins-Bold',
+                                      ),
                                     ),
                                   ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: Column(
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Text(
-                                              "Date : ",
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                                color: textBlackColor,
-                                                fontFamily: 'Poppins-Bold',
-                                              ),
-                                            ),
-                                            Flexible(
-                                              child: Text(
-                                                _complaintDateText(
-                                                    'yyyy-MM-dd'),
-                                                style: TextStyle(
-                                                  fontSize: 15,
-                                                  // fontWeight: FontWeight.bold,
-                                                  color: textBlackColor,
-                                                  fontFamily: 'Poppins-Light',
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        Row(
-                                          children: [
-                                            Text(
-                                              "Time : ",
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                                color: textBlackColor,
-                                                fontFamily: 'Poppins-Bold',
-                                              ),
-                                            ),
-                                            Flexible(
-                                              child: Text(
-                                                _complaintDateText('hh:mm a'),
-                                                style: TextStyle(
-                                                  fontSize: 15,
-                                                  // fontWeight: FontWeight.bold,
-                                                  color: textBlackColor,
-                                                  fontFamily: 'Poppins-Light',
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        Row(
-                                          children: [
-                                            Text(
-                                              "Status : ",
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                                color: textBlackColor,
-                                                fontFamily: 'Poppins-Bold',
-                                              ),
-                                            ),
-                                            Flexible(
-                                              child: Text(
-                                                UserDataUtil.field(
-                                                    complaintData, 'Status'),
-                                                style: TextStyle(
-                                                  fontSize: 15,
-                                                  // fontWeight: FontWeight.bold,
-                                                  color: textBlackColor,
-                                                  fontFamily: 'Poppins-Light',
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                  ComplaintUi.statusChip(
+                                    UserDataUtil.field(
+                                      complaintData,
+                                      'Status',
                                     ),
                                   ),
                                 ],
                               ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ComplaintUi.sectionCard(
+                          title: 'Details of the Complainant',
+                          child: Column(
+                            children: [
+                              ComplaintUi.detailRow(
+                                'Name',
+                                UserDataUtil.field(userData, 'Name'),
+                              ),
+                              ComplaintUi.detailRow(
+                                'NIC No',
+                                UserDataUtil.field(
+                                  userData,
+                                  'NIC',
+                                  fallback: widget.NIC,
+                                ),
+                              ),
+                              ComplaintUi.detailRow(
+                                'Email Address',
+                                UserDataUtil.field(userData, 'Email'),
+                              ),
+                              ComplaintUi.detailRow(
+                                'Mobile Number',
+                                UserDataUtil.field(userData, 'Mobile'),
+                              ),
+                              ComplaintUi.detailRow(
+                                'Address',
+                                UserDataUtil.field(userData, 'Address'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ComplaintUi.sectionCard(
+                          title: 'Details of the Complaint',
+                          child: Column(
+                            children: [
+                              ComplaintUi.detailRow(
+                                'Type',
+                                UserDataUtil.field(complaintData, 'Type'),
+                              ),
+                              ComplaintUi.detailRow(
+                                'Description',
+                                UserDataUtil.field(
+                                  complaintData,
+                                  'Description',
+                                ),
+                              ),
+                              ComplaintUi.detailRow(
+                                'Location',
+                                '${UserDataUtil.field(complaintData, 'Latitude')} , ${UserDataUtil.field(complaintData, 'Longitude')}',
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ComplaintUi.sectionCard(
+                          title: 'Evidence Of the Complaint',
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _evidenceImage(
+                                sysWidth,
+                                UserDataUtil.field(complaintData, 'Image1'),
+                              ),
+                              _evidenceImage(
+                                sysWidth,
+                                UserDataUtil.field(complaintData, 'Image2'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ComplaintUi.sectionCard(
+                          title: 'Comments of the Police',
+                          child: Text(
+                            UserDataUtil.field(complaintData, 'Reason'),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: appTextMuted,
+                              fontFamily: 'Poppins-Light',
                             ),
                           ),
                         ),
-                        SizedBox(height: 20),
-                        Container(
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'Details of the Complainant',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      "Name : ",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: textBlackColor,
-                                        fontFamily: 'Poppins-Bold',
-                                      ),
-                                    ),
-                                    Flexible(
-                                      child: Text(
-                                        UserDataUtil.field(userData, 'Name'),
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          // fontWeight: FontWeight.bold,
-                                          color: textBlackColor,
-                                          fontFamily: 'Poppins-Light',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    Text(
-                                      "NIC No : ",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: textBlackColor,
-                                        fontFamily: 'Poppins-Bold',
-                                      ),
-                                    ),
-                                    Flexible(
-                                      child: Text(
-                                        UserDataUtil.field(
-                                            userData, 'NIC',
-                                            fallback: widget.NIC),
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          // fontWeight: FontWeight.bold,
-                                          color: textBlackColor,
-                                          fontFamily: 'Poppins-Light',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    Text(
-                                      "Email Address : ",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: textBlackColor,
-                                        fontFamily: 'Poppins-Bold',
-                                      ),
-                                    ),
-                                    Flexible(
-                                      child: Text(
-                                        UserDataUtil.field(userData, 'Email'),
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          // fontWeight: FontWeight.bold,
-                                          color: textBlackColor,
-                                          fontFamily: 'Poppins-Light',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    Text(
-                                      "Mobile Number : ",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: textBlackColor,
-                                        fontFamily: 'Poppins-Bold',
-                                      ),
-                                    ),
-                                    Flexible(
-                                      child: Text(
-                                        UserDataUtil.field(userData, 'Mobile'),
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          // fontWeight: FontWeight.bold,
-                                          color: textBlackColor,
-                                          fontFamily: 'Poppins-Light',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "Address : ",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: textBlackColor,
-                                        fontFamily: 'Poppins-Bold',
-                                      ),
-                                    ),
-                                    Flexible(
-                                      child: Text(
-                                        UserDataUtil.field(userData, 'Address'),
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          // fontWeight: FontWeight.bold,
-                                          color: textBlackColor,
-                                          fontFamily: 'Poppins-Light',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
+                        const SizedBox(height: 20),
+                        ComplaintUi.primaryButton(
+                          label: 'Save PDF',
+                          icon: Icons.picture_as_pdf,
+                          width: double.infinity,
+                          onTap: _CreatePDF,
                         ),
-                        SizedBox(height: 20),
-                        Container(
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'Details of the Complaint',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      "Type : ",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: textBlackColor,
-                                        fontFamily: 'Poppins-Bold',
-                                      ),
-                                    ),
-                                    Flexible(
-                                      child: Text(
-                                        UserDataUtil.field(
-                                            complaintData, 'Type'),
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          // fontWeight: FontWeight.bold,
-                                          color: textBlackColor,
-                                          fontFamily: 'Poppins-Light',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "Description : ",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: textBlackColor,
-                                        fontFamily: 'Poppins-Bold',
-                                      ),
-                                    ),
-                                    Flexible(
-                                      child: Text(
-                                        UserDataUtil.field(
-                                            complaintData, 'Description'),
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          // fontWeight: FontWeight.bold,
-                                          color: textBlackColor,
-                                          fontFamily: 'Poppins-Light',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "Location : ",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: textBlackColor,
-                                        fontFamily: 'Poppins-Bold',
-                                      ),
-                                    ),
-                                    Flexible(
-                                      child: Text(
-                                        "${UserDataUtil.field(complaintData, 'Latitude')} , ${UserDataUtil.field(complaintData, 'Longitude')}",
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          // fontWeight: FontWeight.bold,
-                                          color: textBlackColor,
-                                          fontFamily: 'Poppins-Light',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 20),
-                        Container(
-                          width: sysWidth,
-                          // /height: 200,
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'Evidence Of the Complaint',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                Container(
-                                  child: UserDataUtil.field(
-                                              complaintData, 'Image1')
-                                          .isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: UserDataUtil.field(
-                                              complaintData, 'Image1'),
-                                          width: sysWidth / 3,
-                                          placeholder: (context, url) =>
-                                              Container(
-                                            width: 20,
-                                            height: 20,
-                                            child: const Center(
-                                              child:
-                                                  CircularProgressIndicator(),
-                                            ),
-                                          ),
-                                          errorWidget: (context, url, error) =>
-                                              Icon(Icons.error),
-                                        )
-                                      : Container(
-                                          width: 20,
-                                          height: 20,
-                                          child: const Center(
-                                            child: CircularProgressIndicator(),
-                                          ),
-                                        ),
-
-                                  //Image.network(images[pagePosition]),
-                                ),
-                                Container(
-                                  child: UserDataUtil.field(
-                                              complaintData, 'Image2')
-                                          .isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: UserDataUtil.field(
-                                              complaintData, 'Image2'),
-                                          width: sysWidth / 3,
-                                          placeholder: (context, url) =>
-                                              Container(
-                                            width: 20,
-                                            height: 20,
-                                            child: const Center(
-                                              child:
-                                                  CircularProgressIndicator(),
-                                            ),
-                                          ),
-                                          errorWidget: (context, url, error) =>
-                                              Icon(Icons.error),
-                                        )
-                                      : Container(
-                                          width: 20,
-                                          height: 20,
-                                          child: const Center(
-                                            child: CircularProgressIndicator(),
-                                          ),
-                                        ),
-
-                                  //Image.network(images[pagePosition]),
-                                )
-                              ],
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 20),
-                        Container(
-                          width: sysWidth,
-                          // /height: 200,
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'Comments of the Police',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                            child: Text(
-                              UserDataUtil.field(complaintData, 'Reason'),
-                              style: TextStyle(
-                                fontSize: 15,
-                                // fontWeight: FontWeight.bold,
-                                color: textBlackColor,
-                                fontFamily: 'Poppins-Light',
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 20),
-                        InkWell(
-                            onTap: _CreatePDF,
-                            child: Container(
-                              height: 50,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(3),
-                                color: secondary,
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    "Save PDF",
-                                    style: buttonTextStyle,
-                                  ),
-                                  Icon(
-                                    Icons.picture_as_pdf,
-                                    color: normalTextColor,
-                                  ),
-                                ],
-                              ),
-                            )),
-                        SizedBox(height: 20),
                       ],
                     ),
                   ),
                 ),
               ),
       ),
+    );
+  }
+
+  Widget _evidenceImage(double sysWidth, String imageUrl) {
+    return Container(
+      width: sysWidth / 3.2,
+      height: sysWidth / 3.2,
+      decoration: BoxDecoration(
+        color: appSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: appBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: imageUrl.isNotEmpty
+          ? CachedNetworkImage(
+              imageUrl: imageUrl,
+              fit: BoxFit.cover,
+              placeholder: (context, url) => const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              errorWidget: (context, url, error) =>
+                  Icon(Icons.error, color: emergencyPrimary),
+            )
+          : const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
     );
   }
 

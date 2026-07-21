@@ -6,17 +6,14 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 class MapMarker extends Clusterable {
   final String id;
   final LatLng position;
-
-  //  final String PoliceStationName;
-  // final String PhoneNumber;
+  final String policeStationName;
 
   BitmapDescriptor? icon;
 
   MapMarker({
-    // required this.PhoneNumber,
-    // required this.PoliceStationName,
     required this.id,
     required this.position,
+    required this.policeStationName,
     this.icon,
     isCluster = false,
     clusterId,
@@ -33,9 +30,7 @@ class MapMarker extends Clusterable {
         );
 
   Marker toMarker() => Marker(
-        // infoWindow: InfoWindow(
-        //     title: PoliceStationName,
-        //     snippet: PhoneNumber),
+        infoWindow: InfoWindow(title: policeStationName),
         markerId: MarkerId(isCluster! ? 'cl_$id' : id),
         position: LatLng(
           position.latitude,

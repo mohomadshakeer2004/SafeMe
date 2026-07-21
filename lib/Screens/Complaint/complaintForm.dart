@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi';
 import 'dart:io';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:safe_me/service/firebase_service.dart';
@@ -31,6 +30,7 @@ import '../../widgets/forgotPasswordAlertContent.dart';
 import '../../widgets/visible_dialogbutton.dart';
 import '../home_base.dart';
 import 'complaint_base.dart';
+import 'complaint_ui.dart';
 import 'package:file_picker/file_picker.dart';
 
 class ComplaintForm extends StatefulWidget {
@@ -191,49 +191,17 @@ class _ComplaintFormState extends State<ComplaintForm> {
     double sysHeight = MediaQuery.of(context).size.height;
     double sysWidth = MediaQuery.of(context).size.width;
     return Scaffold(
-      backgroundColor: mainBGColor,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: mainBGColor,
-        // iconTheme: IconThemeData(color: iconColor),
-        title: Text(
-          "PlaceComplaint".tr(),
-          style: TextStyle(
-              fontSize: 18,
-              color: secondary,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Poppins-Light'),
-        ),
-        leading: Builder(
-          builder: (BuildContext context) {
-            return IconButton(
-              icon: SvgPicture.asset(
-                "assets/icons/menu.svg",
-                height: sysWidth / 100 * 8,
-                color: buttonColor,
-              ),
-              onPressed: () {
-                Scaffold.of(context).openDrawer();
-              },
-              tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
-            );
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              Icons.arrow_back,
-              color: primaryColor,
-              size: 30,
-            ),
-            onPressed: () {
-              Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const ComplaintHome()));
-            },
-          ),
-        ],
+      backgroundColor: appSurface,
+      appBar: ComplaintUi.appBar(
+        context: context,
+        title: 'PlaceComplaint'.tr(),
+        sysWidth: sysWidth,
+        onBack: () {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const ComplaintHome()),
+          );
+        },
       ),
       drawer: Drawer(
         child: DrawerWidget(),
@@ -245,23 +213,16 @@ class _ComplaintFormState extends State<ComplaintForm> {
             width: sysWidth,
             height: sysHeight,
             child: Padding(
-              padding: const EdgeInsets.all(15.0),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               child: ListView(
                 children: [
-                  SizedBox(height: 15),
+                  const SizedBox(height: 8),
                   FormBuilderDropdown(
                     onChanged: (val) => setState(() {
                       selectDistrict = val.toString();
                     }),
                     name: 'district',
-                    decoration: InputDecoration(
-                      labelText: "district".tr(),
-                      labelStyle: hintTextStyle,
-                      contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                      border: OutlineInputBorder(),
-                      focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: secondary)),
-                    ),
+                    decoration: ComplaintUi.fieldDecoration('district'.tr()),
                     // initialValue: allGroups[0],
                     validator: (value) =>
                         value == null ? "Enter Your District" : null,
@@ -270,20 +231,13 @@ class _ComplaintFormState extends State<ComplaintForm> {
                       SriLankaLocations.districts,
                     ),
                   ),
-                  SizedBox(height: 15),
+                  const SizedBox(height: 14),
                   FormBuilderDropdown(
                     onChanged: (val) => setState(() {
                       selectCity = val.toString();
                     }),
                     name: 'city',
-                    decoration: InputDecoration(
-                      labelText: "City".tr(),
-                      labelStyle: hintTextStyle,
-                      contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                      border: OutlineInputBorder(),
-                      focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: secondary)),
-                    ),
+                    decoration: ComplaintUi.fieldDecoration('City'.tr()),
                     validator: (value) =>
                         value == null ? "Enter Your City" : null,
                     // initialValue: allGroups[0],
@@ -292,7 +246,7 @@ class _ComplaintFormState extends State<ComplaintForm> {
                       SriLankaLocations.cities,
                     ),
                   ),
-                  SizedBox(height: 15),
+                  const SizedBox(height: 14),
                   SafeDateField(
                     name: 'dateTime',
                     labelText: "DateTime".tr(),
@@ -307,20 +261,14 @@ class _ComplaintFormState extends State<ComplaintForm> {
                     validator: (value) =>
                         value == null ? "Select incident date" : null,
                   ),
-                  SizedBox(height: 15),
+                  const SizedBox(height: 14),
                   FormBuilderDropdown(
                     onChanged: (val) => setState(() {
                       selectType = val.toString();
                     }),
                     name: 'type',
-                    decoration: InputDecoration(
-                      labelText: "ComplaintType".tr(),
-                      labelStyle: hintTextStyle,
-                      contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                      border: OutlineInputBorder(),
-                      focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: secondary)),
-                    ),
+                    decoration:
+                        ComplaintUi.fieldDecoration('ComplaintType'.tr()),
                     validator: (value) =>
                         value == null ? "Select Your Complaint Type" : null,
                     // initialValue: allGroups[0],
@@ -332,94 +280,77 @@ class _ComplaintFormState extends State<ComplaintForm> {
                               child: Text(ComplaintType),
                             )).toList(),
                   ),
-                  SizedBox(height: 15),
+                  const SizedBox(height: 14),
                   FormBuilderTextField(
                     cursorColor: secondary,
                     minLines: 5,
                     maxLines: 15,
                     name: 'description',
                     controller: _txtDescriptionController,
-                    decoration: InputDecoration(
-                      labelText: "Description".tr(),
-                      labelStyle: hintTextStyle,
-                      contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                      border: OutlineInputBorder(),
-                      focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: secondary)),
-                    ),
+                    decoration:
+                        ComplaintUi.fieldDecoration('Description'.tr()),
                     validator: (value) =>
                         value!.isEmpty ? 'Description is Required' : null,
                   ),
-                  SizedBox(height: 25),
+                  const SizedBox(height: 22),
                   Text(
-                    "SelectImages".tr(),
+                    'SelectImages'.tr(),
                     style: TextStyle(
-                        // fontSize: 20,
-                        color: tilsTextColor,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'Poppins-Light'),
+                      fontSize: 14,
+                      color: secondary,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Poppins-Bold',
+                    ),
                   ),
-                  SizedBox(height: 15),
+                  const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      InkWell(
+                      ComplaintUi.imagePickerBox(
+                        size: sysWidth / 3.2,
                         onTap: () {
                           showModalBottomSheet(
                             context: context,
+                            backgroundColor: appSurfaceElevated,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(20),
+                              ),
+                            ),
                             builder: ((build) => bottomSheet()),
                           );
                         },
-                        child: Container(
-                          height: sysWidth / 4,
-                          width: sysWidth / 4,
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Colors.black45,
-                              width: 1,
-                            ),
-                          ),
-                          child: _file1 == null
-                              ? Image.asset(
-                                  "assets/images/no_media.png",
-                                  height: sysWidth / 4,
-                                  width: sysWidth / 4,
-                                  fit: BoxFit.cover,
-                                )
-                              : Image.file(_file1!,
-                                  fit: BoxFit.fill, height: 20),
-                        ),
+                        child: _file1 == null
+                            ? Image.asset(
+                                'assets/images/no_media.png',
+                                fit: BoxFit.cover,
+                              )
+                            : Image.file(_file1!, fit: BoxFit.cover),
                       ),
-                      InkWell(
+                      ComplaintUi.imagePickerBox(
+                        size: sysWidth / 3.2,
                         onTap: () {
                           showModalBottomSheet(
                             context: context,
+                            backgroundColor: appSurfaceElevated,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(20),
+                              ),
+                            ),
                             builder: ((build) => bottomSheet()),
                           );
                         },
-                        child: Container(
-                          height: sysWidth / 4,
-                          width: sysWidth / 4,
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Colors.black45,
-                              width: 1,
-                            ),
-                          ),
-                          child: _file2 == null
-                              ? Image.asset(
-                                  "assets/images/no_media.png",
-                                  height: sysWidth / 4,
-                                  width: sysWidth / 4,
-                                  fit: BoxFit.cover,
-                                )
-                              : Image.file(_file2!,
-                                  fit: BoxFit.fill, height: 20),
-                        ),
+                        child: _file2 == null
+                            ? Image.asset(
+                                'assets/images/no_media.png',
+                                fit: BoxFit.cover,
+                              )
+                            : Image.file(_file2!, fit: BoxFit.cover),
                       ),
                     ],
                   ),
-                  SizedBox(height: 20),
+                  const SizedBox(height: 18),
                   FormBuilderCheckbox(
                     onChanged: (val) => setState(() {
                       isAgree = true;
@@ -430,12 +361,15 @@ class _ComplaintFormState extends State<ComplaintForm> {
                     // onChanged: _onChanged,
                     title: const LegalAcceptanceTitle(),
                   ),
-                  SizedBox(height: 15),
+                  const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      InkWell(
-                          onTap: () async {
+                      ComplaintUi.primaryButton(
+                        label: 'Submit'.tr(),
+                        icon: Icons.upload_file_outlined,
+                        width: sysWidth * 0.72,
+                        onTap: () async {
                             try {
                               if (_fbKey.currentState!.saveAndValidate() &&
                                   _file1 != null &&
@@ -534,31 +468,10 @@ class _ComplaintFormState extends State<ComplaintForm> {
                               print("******Not Validate******");
                             } finally {}
                           },
-                          child: Container(
-                            height: 50,
-                            width: sysWidth / 3 * 2,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(3),
-                              color: buttonColor,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "Submit".tr(),
-                                  style: buttonTextStyle,
-                                ),
-                                Icon(
-                                  Icons.upload_file_outlined,
-                                  color: normalTextColor,
-                                ),
-                              ],
-                            ),
-                          )),
+                      ),
                     ],
                   ),
-                  SizedBox(height: 15),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -570,102 +483,88 @@ class _ComplaintFormState extends State<ComplaintForm> {
 
   Widget bottomSheet() {
     double sysHeight = MediaQuery.of(context).size.height;
-    double sysWidth = MediaQuery.of(context).size.width;
     return Container(
-      height: sysHeight / 4,
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              "ChooseFrom".tr(),
-              style: TextStyle(
-                  fontSize: 20,
-                  color: secondary,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Poppins-Bold'),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 4,
+            decoration: BoxDecoration(
+              color: appBorder,
+              borderRadius: BorderRadius.circular(4),
             ),
-            //SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 30),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  InkWell(
-                    onTap: () {
-                      Navigator.pop(context);
-                      takePhoto(ImageSource.camera);
-                    },
-                    child: Container(
-                        height: sysHeight / 8 * 0.7,
-                        width: sysHeight / 8 * 0.7,
-                        decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(3),
-                            boxShadow: const [
-                              BoxShadow(blurRadius: 1, color: Colors.black45)
-                            ]),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.camera_alt_outlined,
-                              color: secondary,
-                              // size: sysWidth / 15 * 1,
-                            ),
-                            Text(
-                              "Camera".tr(),
-                              style: TextStyle(
-                                  // / fontSize: 20,
-                                  color: secondary,
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: 'Poppins-Light'),
-                            ),
-                          ],
-                        )),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      Navigator.pop(context);
-                      pickPhoto(ImageSource.gallery);
-                    },
-                    child: Container(
-                      height: sysHeight / 8 * 0.7,
-                      width: sysHeight / 8 * 0.7,
-                      decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(3),
-                          boxShadow: const [
-                            BoxShadow(blurRadius: 1, color: Colors.black45)
-                          ]),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.image_outlined,
-                            color: secondary,
-                            // size: sysWidth / 15 * 1,
-                          ),
-                          Text(
-                            "Gallery".tr(),
-                            style: TextStyle(
-                                // / fontSize: 20,
-                                color: secondary,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Poppins-Light'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'ChooseFrom'.tr(),
+            style: TextStyle(
+              fontSize: 16,
+              color: secondary,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'Poppins-Bold',
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _sourceOption(
+                icon: Icons.camera_alt_outlined,
+                label: 'Camera'.tr(),
+                onTap: () {
+                  Navigator.pop(context);
+                  takePhoto(ImageSource.camera);
+                },
               ),
-            ),
-          ],
+              _sourceOption(
+                icon: Icons.image_outlined,
+                label: 'Gallery'.tr(),
+                onTap: () {
+                  Navigator.pop(context);
+                  pickPhoto(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sourceOption({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          width: 120,
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          decoration: BoxDecoration(
+            color: appSurface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: appBorder),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: secondary, size: 28),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: secondary,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Poppins-Bold',
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

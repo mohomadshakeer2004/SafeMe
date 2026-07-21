@@ -1,22 +1,20 @@
 import 'dart:convert';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:safe_me/util/date_parse_util.dart';
-import 'package:safe_me/service/firebase_service.dart';
-import 'package:safe_me/service/userService.dart';
-import 'package:safe_me/util/user_data_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
-// import 'package:safe_me/Screens/Schedule/appoinmentForm.dart';
+import 'package:safe_me/service/firebase_service.dart';
+import 'package:safe_me/service/userService.dart';
+import 'package:safe_me/util/date_parse_util.dart';
+import 'package:safe_me/util/user_data_util.dart';
 
 import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../widgets/drawer.dart';
-import '../Complaint/singleSubmission.dart';
+import '../Complaint/complaint_ui.dart';
 import '../home_base.dart';
 import 'appoinmentForm.dart';
 
@@ -28,9 +26,6 @@ class AppointmentBase extends StatefulWidget {
 }
 
 class _AppointmentBaseState extends State<AppointmentBase> {
-  /// Fixed card height (appointments have no image panel like complaints).
-  static const double _appointmentCardHeight = 120;
-
   RefreshController _refreshController =
       RefreshController(initialRefresh: false);
 
@@ -43,33 +38,19 @@ class _AppointmentBaseState extends State<AppointmentBase> {
   String _policeAppointmentId(Map<String, dynamic> item) =>
       '${item['AIDP'] ?? item['AID'] ?? item['aid'] ?? ''}';
 
-  /// Same proportions as complaint history: flex 1 / 4 / 10.
-  Widget _complaintStyleIdStrip(String label) {
-    return Expanded(
-      flex: 1,
-      child: Container(
-        color: secondary,
-        height: double.infinity,
-        child: Center(
-          child: RotatedBox(
-            quarterTurns: 3,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: normalTextColor,
-                fontFamily: 'Poppins-Bold',
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+  String _appointmentStatus(Map<String, dynamic> item) {
+    final raw = '${item['Status'] ?? ''}'.trim();
+    if (raw.isNotEmpty) return raw;
+    return 'Active';
+  }
+
+  bool _canRequestCancel(Map<String, dynamic> item) {
+    final status = _appointmentStatus(item).toLowerCase();
+    return status != 'cancel requested' && status != 'cancelled';
   }
 
   Future<void> _loadAppointments() async {
-    EasyLoading.show(status: "Getting Appointment Data");
+    EasyLoading.show(status: 'Getting_Appointment_Data'.tr());
     try {
       final sessionOk = await UserService().checkSession();
       if (!sessionOk) {
@@ -116,9 +97,6 @@ class _AppointmentBaseState extends State<AppointmentBase> {
         myPublicAppointments = public;
         myPoliceAppointments = police;
       });
-
-      debugPrint(
-          'My appointments ($nic): public=${public.length}, police=${police.length}');
     } catch (e) {
       debugPrint('Failed to load appointments: $e');
       if (mounted) {
@@ -137,6 +115,308 @@ class _AppointmentBaseState extends State<AppointmentBase> {
     _refreshController.refreshCompleted();
   }
 
+  Future<void> _confirmCancelRequest(int index) async {
+    if (index < 0 || index >= myPublicAppointments.length) return;
+    final item = myPublicAppointments[index];
+    final aid = _publicAppointmentId(item);
+
+    if (!_canRequestCancel(item)) {
+      EasyLoading.showInfo('Already_Cancel_Requested'.tr());
+      return;
+    }
+
+    final fine = FirebaseService.appointmentCancelFine;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: appSurfaceElevated,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Cancel_Appointment_Title'.tr(),
+          style: TextStyle(
+            color: secondary,
+            fontFamily: 'Poppins-Bold',
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          'Cancel_Appointment_Message'.tr(namedArgs: {
+            'amount': fine.toStringAsFixed(0),
+          }),
+          style: TextStyle(
+            color: appTextMuted,
+            fontFamily: 'Poppins-Light',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel'.tr()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Request_Cancel'.tr(),
+              style: TextStyle(color: emergencyPrimary),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    EasyLoading.show(status: 'Submitting'.tr());
+    try {
+      await FirebaseService.instance.requestPublicAppointmentCancellation(aid);
+      if (!mounted) return;
+      setState(() {
+        myPublicAppointments[index] = {
+          ...item,
+          'Status': 'Cancel Requested',
+          'CancelFineAmount': fine,
+          'CancelRequestedDate': DateTime.now().toIso8601String(),
+        };
+      });
+      EasyLoading.showSuccess('Cancel_Request_Sent'.tr());
+    } catch (e) {
+      debugPrint('Cancel request failed: $e');
+      EasyLoading.showError('Cancel_Request_Failed'.tr());
+    } finally {
+      EasyLoading.dismiss();
+    }
+  }
+
+  Widget _idStrip(String label) {
+    return Container(
+      width: 44,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            secondary,
+            Color.lerp(secondary, appAccent, 0.3)!,
+          ],
+        ),
+      ),
+      child: Center(
+        child: RotatedBox(
+          quarterTurns: 3,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              fontFamily: 'Poppins-Bold',
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statusChip(String status) {
+    final normalized = status.toLowerCase();
+    Color bg;
+    Color fg;
+
+    if (normalized.contains('cancel requested')) {
+      bg = const Color(0xFFFFEBEE);
+      fg = emergencyPrimary;
+    } else if (normalized.contains('cancelled')) {
+      bg = secondary.withValues(alpha: 0.1);
+      fg = appTextMuted;
+    } else if (normalized.contains('pending')) {
+      bg = const Color(0xFFFFF3E0);
+      fg = const Color(0xFFE65100);
+    } else {
+      bg = appAccent.withValues(alpha: 0.15);
+      fg = secondary;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: fg,
+          fontFamily: 'Poppins-Bold',
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPublicCard(Map<String, dynamic> item, int index) {
+    final status = _appointmentStatus(item);
+    final fine = item['CancelFineAmount'];
+
+    final card = Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: ComplaintUi.cardDecoration(),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _idStrip('AID-${_publicAppointmentId(item)}'),
+            Expanded(
+              child: Container(
+                color: appSurface,
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${item['Type'] ?? ''}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: secondary,
+                              fontFamily: 'Poppins-Bold',
+                            ),
+                          ),
+                        ),
+                        _statusChip(status),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ComplaintUi.detailRow(
+                      'RequestDateTime'.tr(),
+                      '${formatStoredDate(item['RequestedDate'], pattern: 'yyyy-MM-dd')} '
+                      '${formatStoredDate(item['RequestedDate'], pattern: 'hh:mm a')}',
+                    ),
+                    ComplaintUi.detailRow(
+                      'Schedule_Date'.tr(),
+                      '${item['ScheduledDate'] ?? '-'}',
+                    ),
+                    if (item['Description'] != null &&
+                        '${item['Description']}'.isNotEmpty)
+                      ComplaintUi.detailRow(
+                        'Description'.tr(),
+                        '${item['Description']}',
+                      ),
+                    if (status.toLowerCase() == 'cancel requested' &&
+                        fine != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Cancel_Fine_Notice'.tr(namedArgs: {
+                            'amount': '${fine is num ? fine.toStringAsFixed(0) : fine}',
+                          }),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: emergencyPrimary,
+                            fontFamily: 'Poppins-Light',
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!_canRequestCancel(item)) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: card,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Slidable(
+        key: ValueKey('public_appt_${_publicAppointmentId(item)}'),
+        endActionPane: ActionPane(
+          motion: const BehindMotion(),
+          extentRatio: 0.32,
+          children: [
+            SlidableAction(
+              onPressed: (_) => _confirmCancelRequest(index),
+              backgroundColor: emergencyPrimary,
+              foregroundColor: Colors.white,
+              icon: Icons.event_busy_outlined,
+              label: 'Request_Cancel'.tr(),
+              autoClose: true,
+            ),
+          ],
+        ),
+        child: card,
+      ),
+    );
+  }
+
+  Widget _buildPoliceCard(Map<String, dynamic> item) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: ComplaintUi.cardDecoration(),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _idStrip('AID-${_policeAppointmentId(item)}'),
+              Expanded(
+                child: Container(
+                  color: appSurface,
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${item['Type'] ?? ''}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: secondary,
+                                fontFamily: 'Poppins-Bold',
+                              ),
+                            ),
+                          ),
+                          _statusChip('Police_Assigned'.tr()),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ComplaintUi.detailRow(
+                        'AppointmentType'.tr(),
+                        '${item['Type'] ?? '-'}',
+                      ),
+                      ComplaintUi.detailRow(
+                        'Schedule_Date'.tr(),
+                        '${item['ScheduledDate'] ?? '-'}',
+                      ),
+                      ComplaintUi.detailRow(
+                        'City'.tr(),
+                        '${item['City'] ?? '-'}',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -146,621 +426,101 @@ class _AppointmentBaseState extends State<AppointmentBase> {
   @override
   Widget build(BuildContext context) {
     context.watch<LanguageController>();
-    double sysHeight = MediaQuery.of(context).size.height;
-    double sysWidth = MediaQuery.of(context).size.width;
+    final sysWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
-      backgroundColor: mainBGColor,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: mainBGColor,
-        // iconTheme: IconThemeData(color: iconColor),
-        title: Text(
-          "MyAppointment".tr(),
-          style: TextStyle(
-              fontSize: 18,
-              color: secondary,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Poppins-Light'),
-        ),
-        leading: Builder(
-          builder: (BuildContext context) {
-            return IconButton(
-              icon: SvgPicture.asset(
-                "assets/icons/menu.svg",
-                height: sysWidth / 100 * 8,
-                color: buttonColor,
-              ),
-              onPressed: () {
-                Scaffold.of(context).openDrawer();
-              },
-              tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
-            );
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              Icons.arrow_back,
-              color: primaryColor,
-              size: 30,
-            ),
-            onPressed: () {
-              Navigator.pushReplacement(context,
-                  MaterialPageRoute(builder: (context) => const HomeBase()));
-            },
-          ),
-        ],
+      backgroundColor: appSurface,
+      appBar: ComplaintUi.appBar(
+        context: context,
+        title: 'MyAppointment'.tr(),
+        sysWidth: sysWidth,
+        onBack: () {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeBase()),
+          );
+        },
       ),
       drawer: Drawer(
         child: DrawerWidget(),
       ),
       body: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(
-            // flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(15.0),
-              child: InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const AppointmentForm()),
-                  ).then((_) {
-                    if (mounted) _loadAppointments();
-                  });
-                },
-                child: Container(
-                  height: sysHeight / 20 * 1.5,
-                  width: sysWidth,
-                  decoration: BoxDecoration(
-                    color: secondary,
-                    borderRadius: BorderRadius.circular(3),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: ComplaintUi.primaryButton(
+              label: 'Place_Appointment'.tr(),
+              icon: Icons.add_circle_outline_rounded,
+              width: double.infinity,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AppointmentForm(),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 15, right: 15),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(
-                          "Place_Appointment".tr(),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 20,
-                              color: normalTextColor,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'Poppins-Medium'),
-                        ),
-                        Icon(
-                          Icons.add_circle_outline_sharp,
-                          color: normalTextColor,
-                          size: 35,
-                        )
-                        // ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+                ).then((_) {
+                  if (mounted) _loadAppointments();
+                });
+              },
             ),
           ),
           Expanded(
-            flex: 7,
             child: DefaultTabController(
               length: 2,
-              child: SizedBox(
-                height: 100.0,
-                child: Column(
-                  children: <Widget>[
-                    TabBar(
-                      indicatorColor: secondary,
-                      labelColor: secondary,
-                      tabs: <Widget>[
-                        Tab(
-                          text: "History",
+              child: Column(
+                children: [
+                  TabBar(
+                    indicatorColor: appAccent,
+                    labelColor: secondary,
+                    unselectedLabelColor: appTextMuted,
+                    labelStyle: const TextStyle(
+                      fontFamily: 'Poppins-Bold',
+                      fontWeight: FontWeight.w600,
+                    ),
+                    tabs: [
+                      Tab(text: 'Appointment_History'.tr()),
+                      Tab(text: 'Police_Appointments'.tr()),
+                    ],
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        SmartRefresher(
+                          enablePullDown: true,
+                          header: WaterDropMaterialHeader(
+                            backgroundColor: secondary,
+                            color: appSurfaceElevated,
+                          ),
+                          controller: _refreshController,
+                          onRefresh: _onRefresh,
+                          child: myPublicAppointments.isNotEmpty
+                              ? ListView.builder(
+                                  padding: const EdgeInsets.only(top: 8, bottom: 16),
+                                  itemCount: myPublicAppointments.length,
+                                  itemBuilder: (context, i) =>
+                                      _buildPublicCard(
+                                    myPublicAppointments[i],
+                                    i,
+                                  ),
+                                )
+                              : ComplaintUi.emptyState(
+                                  message: 'No_Appointment_Submitted'.tr(),
+                                ),
                         ),
-                        Tab(
-                          text: "Police ",
-                        )
+                        myPoliceAppointments.isNotEmpty
+                            ? ListView.builder(
+                                padding: const EdgeInsets.only(top: 8, bottom: 16),
+                                itemCount: myPoliceAppointments.length,
+                                itemBuilder: (context, i) =>
+                                    _buildPoliceCard(myPoliceAppointments[i]),
+                              )
+                            : ComplaintUi.emptyState(
+                                message: 'No_Police_Appointment'.tr(),
+                              ),
                       ],
                     ),
-                    Expanded(
-                      child: TabBarView(
-                        children: <Widget>[
-                          Container(
-                            child: SmartRefresher(
-                              enablePullDown: true,
-                              enablePullUp: true,
-                              header: WaterDropMaterialHeader(
-                                backgroundColor: secondary,
-                                color: mainBGColor,
-                              ),
-                              controller: _refreshController,
-                              onRefresh: _onRefresh,
-                              child: LayoutBuilder(builder:
-                                  (BuildContext context,
-                                      BoxConstraints constraints) {
-                                return myPublicAppointments.isNotEmpty
-                                    ? Container(
-                                        width: sysWidth,
-                                        height: constraints.maxHeight,
-                                        child: SingleChildScrollView(
-                                          child: Column(
-                                            children: [
-                                              for (var i = 0;
-                                                  i <
-                                                      myPublicAppointments
-                                                          .length;
-                                                  i++)
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.all(8.0),
-                                                  child: Column(
-                                                    children: [
-                                                      Slidable(
-                                                        key: ValueKey(
-                                                            'public_appt_${_publicAppointmentId(myPublicAppointments[i])}'),
-                                                        endActionPane:
-                                                            ActionPane(
-                                                          motion:
-                                                              BehindMotion(),
-                                                          dismissible:
-                                                              DismissiblePane(
-                                                                  onDismissed:
-                                                                      () {}),
-                                                          children: [
-                                                            SlidableAction(
-                                                              onPressed: (ctx) {
-                                                                print(
-                                                                    "Delete Appointment");
-                                                              },
-                                                              backgroundColor:
-                                                                  Color(
-                                                                      0xff0c213a),
-                                                              foregroundColor:
-                                                                  Colors.white,
-                                                              icon: Icons
-                                                                  .delete_outline,
-                                                              label: 'Delete',
-                                                              autoClose: true,
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        child: InkWell(
-                                                          onTap: () {
-                                                            print(
-                                                                "Select Conplaint");
-                                                            // Navigator.push(
-                                                            //   context,
-                                                            //   MaterialPageRoute(
-                                                            //     builder: (context) =>
-                                                            //         SingleSubmissionScreen(
-                                                            //             "${myPublicAppointments[i]['CID']}",
-                                                            //             "${myPublicAppointments[i]['NIC']}"),
-                                                            //   ),
-                                                            // );
-                                                          },
-                                                          child: Container(
-                                                            width: sysWidth,
-                                                            height:
-                                                                _appointmentCardHeight,
-                                                            decoration: BoxDecoration(
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            3),
-                                                                border: Border.all(
-                                                                    color: Colors
-                                                                        .black45)),
-                                                            child: Row(
-                                                              children: [
-                                                                _complaintStyleIdStrip(
-                                                                  'AID-${_publicAppointmentId(myPublicAppointments[i])}',
-                                                                ),
-                                                                Expanded(
-                                                                  flex: 14,
-                                                                  child: Container(
-                                                                    height: double.infinity,
-                                                                    decoration: const BoxDecoration(
-                                                                      border: Border(
-                                                                        left: BorderSide(
-                                                                            color: Colors.black45),
-                                                                      ),
-                                                                    ),
-                                                                    child:
-                                                                        SingleChildScrollView(
-                                                                      child:
-                                                                          Padding(
-                                                                        padding: const EdgeInsets
-                                                                            .only(
-                                                                          left: 8,
-                                                                          top: 5,
-                                                                          bottom: 5,
-                                                                        ),
-                                                                        child:
-                                                                            Column(
-                                                                          crossAxisAlignment:
-                                                                              CrossAxisAlignment.start,
-                                                                          mainAxisAlignment:
-                                                                              MainAxisAlignment.center,
-                                                                          children: [
-                                                                            Row(
-                                                                              children: [
-                                                                                Text(
-                                                                                  "Type : ",
-                                                                                style: TextStyle(
-                                                                                  fontSize: 15,
-                                                                                  fontWeight: FontWeight.bold,
-                                                                                  color: textBlackColor,
-                                                                                  fontFamily: 'Poppins-Bold',
-                                                                                ),
-                                                                              ),
-                                                                              Flexible(
-                                                                                child: Text(
-                                                                                  "${myPublicAppointments[i]['Type']}",
-                                                                                  style: TextStyle(
-                                                                                    fontSize: 15,
-                                                                                    // fontWeight: FontWeight.bold,
-                                                                                    color: textBlackColor,
-                                                                                    fontFamily: 'Poppins-Light',
-                                                                                  ),
-                                                                                ),
-                                                                              )
-                                                                            ],
-                                                                          ),
-                                                                          Row(
-                                                                            children: [
-                                                                              Text(
-                                                                                "Request Date & Time : ",
-                                                                                style: TextStyle(
-                                                                                  fontSize: 15,
-                                                                                  fontWeight: FontWeight.bold,
-                                                                                  color: textBlackColor,
-                                                                                  fontFamily: 'Poppins-Bold',
-                                                                                ),
-                                                                              ),
-                                                                              Column(
-                                                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                children: [
-                                                                                  Text(
-                                                                                    formatStoredDate(
-                                                                                      myPublicAppointments[i]['RequestedDate'],
-                                                                                      pattern: 'yyyy-MM-dd',
-                                                                                    ),
-                                                                                    style: TextStyle(
-                                                                                      fontSize: 15,
-                                                                                      // fontWeight: FontWeight.bold,
-                                                                                      color: textBlackColor,
-                                                                                      fontFamily: 'Poppins-Light',
-                                                                                    ),
-                                                                                  ),
-                                                                                  Text(
-                                                                                    formatStoredDate(
-                                                                                      myPublicAppointments[i]['RequestedDate'],
-                                                                                      pattern: 'hh:mm a',
-                                                                                    ),
-                                                                                    style: TextStyle(
-                                                                                      fontSize: 15,
-                                                                                      // fontWeight: FontWeight.bold,
-                                                                                      color: textBlackColor,
-                                                                                      fontFamily: 'Poppins-Light',
-                                                                                    ),
-                                                                                  ),
-                                                                                ],
-                                                                              ),
-                                                                            ],
-                                                                          ),
-                                                                          Row(
-                                                                            children: [
-                                                                              Text(
-                                                                                "Schedule Date : ",
-                                                                                style: TextStyle(
-                                                                                  fontSize: 15,
-                                                                                  fontWeight: FontWeight.bold,
-                                                                                  color: textBlackColor,
-                                                                                  fontFamily: 'Poppins-Bold',
-                                                                                ),
-                                                                              ),
-                                                                              Column(
-                                                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                children: [
-                                                                                  Text(
-                                                                                    "${myPublicAppointments[i]['ScheduledDate']}",
-                                                                                    style: TextStyle(
-                                                                                      fontSize: 15,
-                                                                                      // fontWeight: FontWeight.bold,
-                                                                                      color: textBlackColor,
-                                                                                      fontFamily: 'Poppins-Light',
-                                                                                    ),
-                                                                                  ),
-                                                                                ],
-                                                                              ),
-                                                                            ],
-                                                                          ),
-                                                                          Row(
-                                                                            children: [
-                                                                              Text(
-                                                                                "Description : ",
-                                                                                style: TextStyle(
-                                                                                  fontSize: 15,
-                                                                                  fontWeight: FontWeight.bold,
-                                                                                  color: textBlackColor,
-                                                                                  fontFamily: 'Poppins-Bold',
-                                                                                ),
-                                                                              ),
-                                                                              Text(
-                                                                                "${myPublicAppointments[i]['Description']}",
-                                                                                style: TextStyle(
-                                                                                  fontSize: 15,
-                                                                                  // fontWeight: FontWeight.bold,
-                                                                                  color: textBlackColor,
-                                                                                  fontFamily: 'Poppins-Light',
-                                                                                ),
-                                                                              ),
-                                                                            ],
-                                                                          ),
-                                                                        ],
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ),),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      )
-                                    : Container(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.center,
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              "No Appointment Submitted",
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                color: textBlackColor,
-                                                fontFamily: 'Poppins-Light',
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                              }),
-                            ),
-                          ),
-                          Container(
-                            child: LayoutBuilder(builder: (BuildContext context,
-                                BoxConstraints constraints) {
-                              return myPoliceAppointments.isNotEmpty
-                                  ? Container(
-                                      width: sysWidth,
-                                      height: constraints.maxHeight,
-                                      child: SingleChildScrollView(
-                                        child: Column(
-                                          children: [
-                                            for (var i = 0;
-                                                i < myPoliceAppointments.length;
-                                                i++)
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.all(8.0),
-                                                child: Column(
-                                                  children: [
-                                                    Slidable(
-                                                      key: ValueKey(
-                                                          'police_appt_${_policeAppointmentId(myPoliceAppointments[i])}'),
-                                                      endActionPane: ActionPane(
-                                                        motion: BehindMotion(),
-                                                        dismissible:
-                                                            DismissiblePane(
-                                                                onDismissed:
-                                                                    () {}),
-                                                        children: [
-                                                          SlidableAction(
-                                                            onPressed: (ctx) {
-                                                              print(
-                                                                  "Delete Appointment");
-                                                            },
-                                                            backgroundColor:
-                                                                Color(
-                                                                    0xff0c213a),
-                                                            foregroundColor:
-                                                                Colors.white,
-                                                            icon: Icons
-                                                                .delete_outline,
-                                                            label: 'Delete',
-                                                            autoClose: true,
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      child: InkWell(
-                                                        onTap: () {
-                                                          // print(
-                                                          //     "Select Complaint");
-                                                          // Navigator.push(
-                                                          //   context,
-                                                          //   MaterialPageRoute(
-                                                          //     builder: (context) =>
-                                                          //         SingleSubmissionScreen(
-                                                          //             "${myPublicAppointments[i]['CID']}",
-                                                          //             "${myPublicAppointments[i]['NIC']}"),
-                                                          //   ),
-                                                          // );
-                                                        },
-                                                        child: Container(
-                                                          width: sysWidth,
-                                                          height:
-                                                              _appointmentCardHeight,
-                                                          decoration: BoxDecoration(
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          3),
-                                                              border: Border.all(
-                                                                  color: Colors
-                                                                      .black45)),
-                                                          child: Row(
-                                                            children: [
-                                                              _complaintStyleIdStrip(
-                                                                'AID-${_policeAppointmentId(myPoliceAppointments[i])}',
-                                                              ),
-                                                              Expanded(
-                                                                flex: 14,
-                                                                child: Container(
-                                                                  height: double.infinity,
-                                                                  decoration: const BoxDecoration(
-                                                                    border: Border(
-                                                                      left: BorderSide(
-                                                                          color: Colors.black45),
-                                                                    ),
-                                                                  ),
-                                                                  child:
-                                                                      SingleChildScrollView(
-                                                                    child: Padding(
-                                                                      padding: const EdgeInsets
-                                                                          .only(
-                                                                        left: 8,
-                                                                        top: 5,
-                                                                        bottom: 5,
-                                                                      ),
-                                                                      child: Column(
-                                                                        crossAxisAlignment:
-                                                                            CrossAxisAlignment
-                                                                                .start,
-                                                                        mainAxisAlignment:
-                                                                            MainAxisAlignment
-                                                                                .center,
-                                                                        children: [
-                                                                          Row(
-                                                                            children: [
-                                                                              Text(
-                                                                                "Type : ",
-                                                                              style: TextStyle(
-                                                                                fontSize: 15,
-                                                                                fontWeight: FontWeight.bold,
-                                                                                color: textBlackColor,
-                                                                                fontFamily: 'Poppins-Bold',
-                                                                              ),
-                                                                            ),
-                                                                            Flexible(
-                                                                              child: Text(
-                                                                                "${myPoliceAppointments[i]['Type']}",
-                                                                                style: TextStyle(
-                                                                                  fontSize: 15,
-                                                                                  // fontWeight: FontWeight.bold,
-                                                                                  color: textBlackColor,
-                                                                                  fontFamily: 'Poppins-Light',
-                                                                                ),
-                                                                              ),
-                                                                            )
-                                                                          ],
-                                                                        ),
-                                                                        Row(
-                                                                          children: [
-                                                                            Text(
-                                                                              "Schedule Date : ",
-                                                                              style: TextStyle(
-                                                                                fontSize: 15,
-                                                                                fontWeight: FontWeight.bold,
-                                                                                color: textBlackColor,
-                                                                                fontFamily: 'Poppins-Bold',
-                                                                              ),
-                                                                            ),
-                                                                            Column(
-                                                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                                                              children: [
-                                                                                Text(
-                                                                                  "${myPoliceAppointments[i]['ScheduledDate']}",
-                                                                                  style: TextStyle(
-                                                                                    fontSize: 15,
-                                                                                    // fontWeight: FontWeight.bold,
-                                                                                    color: textBlackColor,
-                                                                                    fontFamily: 'Poppins-Light',
-                                                                                  ),
-                                                                                ),
-                                                                              ],
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                        Row(
-                                                                          children: [
-                                                                            Text(
-                                                                              "City : ",
-                                                                              style: TextStyle(
-                                                                                fontSize: 15,
-                                                                                fontWeight: FontWeight.bold,
-                                                                                color: textBlackColor,
-                                                                                fontFamily: 'Poppins-Bold',
-                                                                              ),
-                                                                            ),
-                                                                            Flexible(
-                                                                              child: Text(
-                                                                                "${myPoliceAppointments[i]['City']}",
-                                                                                style: TextStyle(
-                                                                                  fontSize: 15,
-                                                                                  // fontWeight: FontWeight.bold,
-                                                                                  color: textBlackColor,
-                                                                                  fontFamily: 'Poppins-Light',
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    )
-                                  : Container(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            "No Appointment",
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              color: textBlackColor,
-                                              fontFamily: 'Poppins-Light',
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                            }),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

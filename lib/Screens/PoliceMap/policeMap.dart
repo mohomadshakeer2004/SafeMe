@@ -219,7 +219,7 @@ class _PoliceMapState extends State<PoliceMap> {
           icon: icon,
           zIndex: 2,
           infoWindow: InfoWindow(
-            title: station.displayName(i + 1),
+            title: station.name,
             snippet: station.distanceLabel,
           ),
         ),
@@ -245,14 +245,15 @@ class _PoliceMapState extends State<PoliceMap> {
   void _initMarkers() async {
     final List<MapMarker> markers = [];
 
-    for (LatLng markerLocation in PoliceStationsData.locations) {
+    for (final station in PoliceStationsData.stations) {
       final BitmapDescriptor markerImage =
           await MapHelper.getMarkerImageFromUrl(_markerImageUrl);
 
       markers.add(
         MapMarker(
-          id: PoliceStationsData.locations.indexOf(markerLocation).toString(),
-          position: markerLocation,
+          id: station.id.toString(),
+          position: station.position,
+          policeStationName: station.name,
           icon: markerImage,
         ),
       );
@@ -361,7 +362,7 @@ class _PoliceMapState extends State<PoliceMap> {
                     final station = _nearestStations[index];
                     return _NearestStationTile(
                       rank: index + 1,
-                      title: station.displayName(index + 1),
+                      title: station.name,
                       distance: station.distanceLabel,
                       onTap: () => _focusStation(station),
                     );
@@ -443,7 +444,7 @@ class _PoliceMapState extends State<PoliceMap> {
                   final station = _nearestStations[index];
                   return _NearestStationTile(
                     rank: index + 1,
-                      title: station.displayName(index + 1),
+                      title: station.name,
                     distance: station.distanceLabel,
                     onTap: () => _focusStation(station),
                   );
@@ -607,10 +608,10 @@ class _NearestStationTile extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: secondary,
                         fontFamily: 'Poppins-Bold',

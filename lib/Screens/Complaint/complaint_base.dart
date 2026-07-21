@@ -12,6 +12,7 @@ import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
 import '../../widgets/drawer.dart';
 import '../home_base.dart';
+import 'complaint_ui.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:safe_me/util/date_parse_util.dart';
 import '../../Controller/language_controller.dart';
@@ -125,16 +126,7 @@ class _ComplaintHomeState extends State<ComplaintHome> {
   }
 
   List<Widget> indicators(imagesLength, currentIndex) {
-    return List<Widget>.generate(imagesLength, (index) {
-      return Container(
-        margin: EdgeInsets.all(3),
-        width: 5,
-        height: 5,
-        decoration: BoxDecoration(
-            color: currentIndex == index ? Colors.black : Colors.black26,
-            shape: BoxShape.circle),
-      );
-    });
+    return ComplaintUi.pageIndicators(imagesLength, currentIndex);
   }
 
   int activePage = 0;
@@ -153,47 +145,17 @@ class _ComplaintHomeState extends State<ComplaintHome> {
     double sysHeight = MediaQuery.of(context).size.height;
     double sysWidth = MediaQuery.of(context).size.width;
     return Scaffold(
-      backgroundColor: mainBGColor,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: mainBGColor,
-        // iconTheme: IconThemeData(color: iconColor),
-        title: Text(
-          "Complaint".tr(),
-          style: TextStyle(
-              fontSize: 18,
-              color: secondary,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Poppins-Light'),
-        ),
-        leading: Builder(
-          builder: (BuildContext context) {
-            return IconButton(
-              icon: SvgPicture.asset(
-                "assets/icons/menu.svg",
-                height: sysWidth / 100 * 8,
-                color: buttonColor,
-              ),
-              onPressed: () {
-                Scaffold.of(context).openDrawer();
-              },
-              tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
-            );
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              Icons.arrow_back,
-              color: primaryColor,
-              size: 30,
-            ),
-            onPressed: () {
-              Navigator.pushReplacement(context,
-                  MaterialPageRoute(builder: (context) => const HomeBase()));
-            },
-          ),
-        ],
+      backgroundColor: appSurface,
+      appBar: ComplaintUi.appBar(
+        context: context,
+        title: 'Complaint'.tr(),
+        sysWidth: sysWidth,
+        onBack: () {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeBase()),
+          );
+        },
       ),
       drawer: Drawer(
         child: DrawerWidget(),
@@ -205,44 +167,17 @@ class _ComplaintHomeState extends State<ComplaintHome> {
           Expanded(
             flex: 1,
             child: Padding(
-              padding: const EdgeInsets.all(15.0),
-              child: InkWell(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: ComplaintUi.primaryButton(
+                label: 'PlaceComplaint'.tr(),
+                icon: Icons.add_circle_outline_rounded,
+                width: double.infinity,
                 onTap: () {
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (context) => ComplaintForm()));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => ComplaintForm()),
+                  );
                 },
-                child: Container(
-                  height: sysHeight / 20 * 1.5,
-                  width: sysWidth,
-                  decoration: BoxDecoration(
-                    color: secondary,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 15, right: 15),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(
-                          "PlaceComplaint".tr(),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 20,
-                              color: normalTextColor,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'Poppins-Medium'),
-                        ),
-                        Icon(
-                          Icons.add_circle_outline_sharp,
-                          color: normalTextColor,
-                          size: 35,
-                        )
-                        // ),
-                      ],
-                    ),
-                  ),
-                ),
               ),
             ),
           ),
@@ -253,7 +188,7 @@ class _ComplaintHomeState extends State<ComplaintHome> {
               enablePullUp: true,
               header: WaterDropMaterialHeader(
                 backgroundColor: secondary,
-                color: mainBGColor,
+                color: appSurfaceElevated,
               ),
               controller: _refreshController,
               onRefresh: _onRefresh,
@@ -274,7 +209,10 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                             children: [
                               for (var i = 0; i < myComplaints.length; i++)
                                 Padding(
-                                  padding: const EdgeInsets.all(8.0),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
                                   child: Column(
                                     children: [
                                       Slidable(
@@ -318,17 +256,27 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                           child: Container(
                                             width: sysWidth,
                                             height: sysHeight * 0.2,
-                                            decoration: BoxDecoration(
-                                                borderRadius:
-                                                    BorderRadius.circular(3),
-                                                border: Border.all(
-                                                    color: Colors.black45)),
+                                            clipBehavior: Clip.antiAlias,
+                                            decoration:
+                                                ComplaintUi.cardDecoration(),
                                             child: Row(
                                               children: [
                                                 Expanded(
                                                   flex: 1,
                                                   child: Container(
-                                                    color: secondary,
+                                                    decoration: BoxDecoration(
+                                                      gradient: LinearGradient(
+                                                        begin:
+                                                            Alignment.topCenter,
+                                                        end: Alignment
+                                                            .bottomCenter,
+                                                        colors: [
+                                                          secondary,
+                                                          Color.lerp(secondary,
+                                                              appAccent, 0.3)!,
+                                                        ],
+                                                      ),
+                                                    ),
                                                     height: double.infinity,
                                                     child: Center(
                                                       child: RotatedBox(
@@ -355,15 +303,15 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                     // color: Colors.greenAccent,
                                                     height: double.infinity,
                                                     width: double.infinity,
-                                                    decoration:
-                                                        const BoxDecoration(
+                                                    decoration: BoxDecoration(
+                                                      color: appSurface,
                                                       border: Border(
                                                         left: BorderSide(
-                                                            color:
-                                                                Colors.black45),
+                                                          color: appBorder,
+                                                        ),
                                                         right: BorderSide(
-                                                            color:
-                                                                Colors.black45),
+                                                          color: appBorder,
+                                                        ),
                                                       ),
                                                     ),
                                                     child: Column(
@@ -449,9 +397,10 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                     child: Padding(
                                                       padding:
                                                           const EdgeInsets.only(
-                                                              left: 8,
-                                                              top: 5,
-                                                              bottom: 5),
+                                                              left: 12,
+                                                              top: 8,
+                                                              bottom: 8,
+                                                              right: 8),
                                                       child: Column(
                                                         crossAxisAlignment:
                                                             CrossAxisAlignment
@@ -460,111 +409,29 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                             MainAxisAlignment
                                                                 .center,
                                                         children: [
-                                                          Row(
-                                                            children: [
-                                                              Text(
-                                                                "Type : ",
-                                                                style:
-                                                                    TextStyle(
-                                                                  fontSize: 15,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  color:
-                                                                      textBlackColor,
-                                                                  fontFamily:
-                                                                      'Poppins-Bold',
-                                                                ),
-                                                              ),
-                                                              Flexible(
-                                                                child: Text(
-                                                                  "${myComplaints[i]['Type']}",
-                                                                  style:
-                                                                      TextStyle(
-                                                                    fontSize:
-                                                                        15,
-                                                                    // fontWeight: FontWeight.bold,
-                                                                    color:
-                                                                        textBlackColor,
-                                                                    fontFamily:
-                                                                        'Poppins-Light',
-                                                                  ),
-                                                                ),
-                                                              )
-                                                            ],
+                                                          _complaintInfoRow(
+                                                            'Type',
+                                                            '${myComplaints[i]['Type']}',
+                                                          ),
+                                                          _complaintInfoRow(
+                                                            'District',
+                                                            '${myComplaints[i]['District']}',
+                                                          ),
+                                                          _complaintInfoRow(
+                                                            'City',
+                                                            '${myComplaints[i]['City']}',
                                                           ),
                                                           Row(
                                                             children: [
                                                               Text(
-                                                                "District : ",
-                                                                style:
-                                                                    TextStyle(
-                                                                  fontSize: 15,
+                                                                'Date & Time : ',
+                                                                style: TextStyle(
+                                                                  fontSize: 12,
                                                                   fontWeight:
                                                                       FontWeight
-                                                                          .bold,
+                                                                          .w600,
                                                                   color:
-                                                                      textBlackColor,
-                                                                  fontFamily:
-                                                                      'Poppins-Bold',
-                                                                ),
-                                                              ),
-                                                              Text(
-                                                                "${myComplaints[i]['District']}",
-                                                                style:
-                                                                    TextStyle(
-                                                                  fontSize: 15,
-                                                                  // fontWeight: FontWeight.bold,
-                                                                  color:
-                                                                      textBlackColor,
-                                                                  fontFamily:
-                                                                      'Poppins-Light',
-                                                                ),
-                                                              )
-                                                            ],
-                                                          ),
-                                                          Row(
-                                                            children: [
-                                                              Text(
-                                                                "City : ",
-                                                                style:
-                                                                    TextStyle(
-                                                                  fontSize: 15,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  color:
-                                                                      textBlackColor,
-                                                                  fontFamily:
-                                                                      'Poppins-Bold',
-                                                                ),
-                                                              ),
-                                                              Text(
-                                                                "${myComplaints[i]['City']}",
-                                                                style:
-                                                                    TextStyle(
-                                                                  fontSize: 15,
-                                                                  // fontWeight: FontWeight.bold,
-                                                                  color:
-                                                                      textBlackColor,
-                                                                  fontFamily:
-                                                                      'Poppins-Light',
-                                                                ),
-                                                              )
-                                                            ],
-                                                          ),
-                                                          Row(
-                                                            children: [
-                                                              Text(
-                                                                "Date & Time : ",
-                                                                style:
-                                                                    TextStyle(
-                                                                  fontSize: 15,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  color:
-                                                                      textBlackColor,
+                                                                      secondary,
                                                                   fontFamily:
                                                                       'Poppins-Bold',
                                                                 ),
@@ -576,32 +443,36 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                                 children: [
                                                                   Text(
                                                                     formatStoredDate(
-                                                                      myComplaints[i]['Date'],
-                                                                      pattern: 'yyyy-MM-dd',
+                                                                      myComplaints[i]
+                                                                          [
+                                                                          'Date'],
+                                                                      pattern:
+                                                                          'yyyy-MM-dd',
                                                                     ),
                                                                     style:
                                                                         TextStyle(
                                                                       fontSize:
-                                                                          15,
-                                                                      // fontWeight: FontWeight.bold,
+                                                                          12,
                                                                       color:
-                                                                          textBlackColor,
+                                                                          appTextMuted,
                                                                       fontFamily:
                                                                           'Poppins-Light',
                                                                     ),
                                                                   ),
                                                                   Text(
                                                                     formatStoredDate(
-                                                                      myComplaints[i]['Date'],
-                                                                      pattern: 'hh:mm a',
+                                                                      myComplaints[i]
+                                                                          [
+                                                                          'Date'],
+                                                                      pattern:
+                                                                          'hh:mm a',
                                                                     ),
                                                                     style:
                                                                         TextStyle(
                                                                       fontSize:
-                                                                          15,
-                                                                      // fontWeight: FontWeight.bold,
+                                                                          12,
                                                                       color:
-                                                                          textBlackColor,
+                                                                          appTextMuted,
                                                                       fontFamily:
                                                                           'Poppins-Light',
                                                                     ),
@@ -610,34 +481,27 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                                               ),
                                                             ],
                                                           ),
+                                                          const SizedBox(
+                                                              height: 6),
                                                           Row(
                                                             children: [
                                                               Text(
-                                                                "Status : ",
-                                                                style:
-                                                                    TextStyle(
-                                                                  fontSize: 15,
+                                                                'Status : ',
+                                                                style: TextStyle(
+                                                                  fontSize: 12,
                                                                   fontWeight:
                                                                       FontWeight
-                                                                          .bold,
+                                                                          .w600,
                                                                   color:
-                                                                      textBlackColor,
+                                                                      secondary,
                                                                   fontFamily:
                                                                       'Poppins-Bold',
                                                                 ),
                                                               ),
-                                                              Text(
-                                                                "${myComplaints[i]['Status']}",
-                                                                style:
-                                                                    TextStyle(
-                                                                  fontSize: 15,
-                                                                  // fontWeight: FontWeight.bold,
-                                                                  color:
-                                                                      textBlackColor,
-                                                                  fontFamily:
-                                                                      'Poppins-Light',
-                                                                ),
-                                                              )
+                                                              ComplaintUi
+                                                                  .statusChip(
+                                                                '${myComplaints[i]['Status']}',
+                                                              ),
                                                             ],
                                                           ),
                                                         ],
@@ -657,23 +521,39 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                           ),
                         ),
                       )
-                    : Container(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              "No Complaints Submitted",
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: textBlackColor,
-                                fontFamily: 'Poppins-Light',
-                              ),
-                            ),
-                          ],
-                        ),
+                    : ComplaintUi.emptyState(
+                        message: 'No Complaints Submitted',
                       );
               }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _complaintInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Text(
+            '$label : ',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: secondary,
+              fontFamily: 'Poppins-Bold',
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                color: appTextMuted,
+                fontFamily: 'Poppins-Light',
+              ),
             ),
           ),
         ],

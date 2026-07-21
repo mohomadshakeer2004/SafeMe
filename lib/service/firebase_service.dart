@@ -725,4 +725,30 @@ class FirebaseService {
     final current = int.tryParse('$raw') ?? 0;
     return current + 1;
   }
+
+  static const double appointmentCancelFine = 500;
+
+  Future<void> requestPublicAppointmentCancellation(String aid) async {
+    await ensureAuthenticatedForWrite();
+    final updates = <String, dynamic>{
+      'Status': 'Cancel Requested',
+      'CancelFineAmount': appointmentCancelFine,
+      'CancelRequestedDate': DateTime.now().toIso8601String(),
+    };
+
+    final paths = [
+      'Appointments/PublicAppointments/Records/$aid',
+      'Appointments/PublicAppointments/$aid',
+    ];
+
+    for (final path in paths) {
+      final snapshot = await rootRef.child(path).get().timeout(rtdbTimeout);
+      if (snapshot.exists) {
+        await rootRef.child(path).update(updates).timeout(rtdbTimeout);
+        return;
+      }
+    }
+
+    throw StateError('Appointment $aid not found');
+  }
 }

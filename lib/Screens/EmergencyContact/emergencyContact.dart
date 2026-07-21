@@ -1,14 +1,14 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_phone_direct_caller/flutter_phone_direct_caller.dart';
-import 'package:flutter_svg/svg.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../widgets/drawer.dart';
+import '../Complaint/complaint_ui.dart';
 import '../home_base.dart';
+import 'emergency_contacts_data.dart';
 
 class EmergencyContact extends StatefulWidget {
   const EmergencyContact({Key? key}) : super(key: key);
@@ -18,202 +18,149 @@ class EmergencyContact extends StatefulWidget {
 }
 
 class _EmergencyContactState extends State<EmergencyContact> {
+  String _formatNumber(String number) {
+    if (number.length == 3 || number.length == 4) return number;
+    if (number.startsWith('011') && number.length == 10) {
+      return '${number.substring(0, 3)} ${number.substring(3, 6)} ${number.substring(6)}';
+    }
+    return number;
+  }
+
+  Future<void> _callNumber(String number) async {
+    await FlutterPhoneDirectCaller.callNumber(number);
+  }
+
+  Widget _buildContactCard(SriLankaEmergencyContact contact) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _callNumber(contact.number),
+          borderRadius: BorderRadius.circular(ComplaintUi.radius),
+          child: Ink(
+            decoration: ComplaintUi.cardDecoration(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: emergencyPrimary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      contact.icon,
+                      color: emergencyPrimary,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          contact.nameKey.tr(),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: secondary,
+                            fontFamily: 'Poppins-Bold',
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatNumber(contact.number),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: appTextMuted,
+                            fontFamily: 'Poppins-Light',
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: secondary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.phone_in_talk_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     context.watch<LanguageController>();
-    double sysHeight = MediaQuery.of(context).size.height;
-    double sysWidth = MediaQuery.of(context).size.width;
+    final sysWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
-      backgroundColor: mainBGColor,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: mainBGColor,
-        // iconTheme: IconThemeData(color: iconColor),
-        title: Text(
-          "Contact".tr(),
-          style: TextStyle(
-              fontSize: 18,
-              color: secondary,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Poppins-Light'),
-        ),
-        leading: Builder(
-          builder: (BuildContext context) {
-            return IconButton(
-              icon: SvgPicture.asset(
-                "assets/icons/menu.svg",
-                height: sysWidth / 100 * 8,
-                color: buttonColor,
-              ),
-              onPressed: () {
-                Scaffold.of(context).openDrawer();
-              },
-              tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
-            );
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              Icons.arrow_back,
-              color: primaryColor,
-              size: 30,
-            ),
-            onPressed: () {
-              Navigator.pushReplacement(context,
-                  MaterialPageRoute(builder: (context) => const HomeBase()));
-            },
-          ),
-        ],
+      backgroundColor: appSurface,
+      appBar: ComplaintUi.appBar(
+        context: context,
+        title: 'Contact'.tr(),
+        sysWidth: sysWidth,
+        onBack: () {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeBase()),
+          );
+        },
       ),
       drawer: Drawer(
         child: DrawerWidget(),
       ),
-      body: Container(
-        height: sysHeight,
-        width: sysWidth,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: ListView(
-            children: [
-              InkWell(
-                onTap: () {
-                  const number = '1990'; //set the number here
-                  FlutterPhoneDirectCaller.callNumber(number);
-                },
-                child: Container(
-                  height: sysHeight / 6 * 1,
-                  width: sysWidth - 40,
-                  decoration: BoxDecoration(
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  emergencyPrimary,
+                  Color.lerp(emergencyPrimary, emergencySecondary, 0.4)!,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(ComplaintUi.radius),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.emergency_share_rounded, color: Colors.white, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Emergency_Contacts_Info'.tr(),
+                    style: const TextStyle(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      //border: Border.all(width: 1,color: Colors.red),
-                      boxShadow: const [
-                        BoxShadow(
-                          blurRadius: 1,
-                          color: Colors.black45,
-                        )
-                      ]),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            "Ambulance Services",
-                            style: TextStyle(
-                                fontSize: 22,
-                                color: secondary,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Poppins-Regular'),
-                          ),
-                        ),
-                        Icon(
-                          FontAwesomeIcons.phoneVolume,
-                          color: secondary,
-                          size: 25,
-                        ),
-                      ],
+                      fontSize: 13,
+                      fontFamily: 'Poppins-Light',
+                      height: 1.35,
                     ),
                   ),
                 ),
-              ),
-              SizedBox(height: 20),
-              InkWell(
-                onTap: () {
-                  const number = '110'; //set the number here
-                  FlutterPhoneDirectCaller.callNumber(number);
-                },
-                child: Container(
-                  height: sysHeight / 6 * 1,
-                  width: sysWidth - 40,
-                  decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      //border: Border.all(width: 1,color: Colors.red),
-                      boxShadow: const [
-                        BoxShadow(
-                          blurRadius: 1,
-                          color: Colors.black45,
-                        )
-                      ]),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            "Fire & rescue",
-                            style: TextStyle(
-                                fontSize: 22,
-                                color: secondary,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Poppins-Regular'),
-                          ),
-                        ),
-                        Icon(
-                          FontAwesomeIcons.phoneVolume,
-                          color: secondary,
-                          size: 25,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: 20),
-              InkWell(
-                onTap: () {
-                  const number = '0112691111'; //set the number here
-                  FlutterPhoneDirectCaller.callNumber(number);
-                },
-                child: Container(
-                  height: sysHeight / 6 * 1,
-                  width: sysWidth - 40,
-                  decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      //border: Border.all(width: 1,color: Colors.red),
-                      boxShadow: const [
-                        BoxShadow(
-                          blurRadius: 1,
-                          color: Colors.black45,
-                        )
-                      ]),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            "General Hospital-Colombo",
-                            style: TextStyle(
-                                fontSize: 22,
-                                color: secondary,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Poppins-Regular'),
-                          ),
-                        ),
-                        Icon(
-                          FontAwesomeIcons.phoneVolume,
-                          color: secondary,
-                          size: 25,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: 20),
-            ],
+              ],
+            ),
           ),
-        ),
+          const SizedBox(height: 16),
+          ...sriLankaEmergencyContacts.map(_buildContactCard),
+        ],
       ),
     );
   }
