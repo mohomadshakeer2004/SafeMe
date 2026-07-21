@@ -389,12 +389,15 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Stack(
             children: [
               Positioned(
-                right: -18,
-                top: -18,
-                child: Icon(
-                  Icons.local_police_rounded,
-                  size: 110,
-                  color: Colors.white.withValues(alpha: 0.07),
+                right: 12,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: Icon(
+                    Icons.local_police_rounded,
+                    size: 110,
+                    color: Colors.white.withValues(alpha: 0.07),
+                  ),
                 ),
               ),
               Padding(
@@ -454,15 +457,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
-                    Image.asset(
-                      'assets/images/ringing.gif',
-                      height: 48,
-                      errorBuilder: (_, __, ___) => const Icon(
-                        Icons.ring_volume_rounded,
-                        color: Colors.white,
-                        size: 36,
-                      ),
-                    ),
+                    const _RingingPhoneIcon(),
                   ],
                 ),
               ),
@@ -750,6 +745,56 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       EasyLoading.dismiss();
     }
+  }
+}
+
+/// White ringing phone icon for the emergency card (always visible on red).
+class _RingingPhoneIcon extends StatefulWidget {
+  const _RingingPhoneIcon();
+
+  @override
+  State<_RingingPhoneIcon> createState() => _RingingPhoneIconState();
+}
+
+class _RingingPhoneIconState extends State<_RingingPhoneIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _shake;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat(reverse: true);
+    _shake = Tween<double>(begin: -0.12, end: 0.12).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _shake,
+      builder: (context, child) {
+        return Transform.rotate(
+          angle: _shake.value,
+          child: child,
+        );
+      },
+      child: const Icon(
+        Icons.ring_volume_rounded,
+        color: Colors.white,
+        size: 32,
+      ),
+    );
   }
 }
 
