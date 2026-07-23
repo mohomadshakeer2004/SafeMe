@@ -56,6 +56,9 @@ class _LostFoundItemState extends State<LostFoundItem> {
   takePhoto(ImageSource source) async {
     final img = await ImagePicker().pickImage(
       source: source,
+      maxWidth: 1280,
+      maxHeight: 1280,
+      imageQuality: 70,
     );
 
     setState(() {
@@ -549,16 +552,7 @@ class _LostFoundItemState extends State<LostFoundItem> {
           .set(cid)
           .timeout(timeout);
 
-      final countEvent = await databaseRef
-          .child("/Complaints/ComplaintCount")
-          .once()
-          .timeout(timeout);
-      final count = int.tryParse('${countEvent.snapshot.value}') ?? 0;
-      await databaseRef
-          .child("/Complaints/ComplaintCount")
-          .set(count + 1)
-          .timeout(timeout);
-
+      // Lost & Found only — do not inflate general ComplaintCount.
       final lfEvent = await databaseRef
           .child("/Complaints/LostAndFoundCount")
           .once()
@@ -569,7 +563,7 @@ class _LostFoundItemState extends State<LostFoundItem> {
           .set(lfCount + 1)
           .timeout(timeout);
 
-      _uploadComplaintImages(databaseRef, cid, Image1, Image2);
+      await _uploadComplaintImages(databaseRef, cid, Image1, Image2);
 
       return true;
     } catch (e) {
@@ -586,27 +580,38 @@ class _LostFoundItemState extends State<LostFoundItem> {
   ) async {
     try {
       final results = await Future.wait([
-        StorageService.uploadFile(
-          storagePath: "complaints/${cid}_1",
+        StorageService.uploadFileOrInline(
+          storagePath: "lostandfound/${cid}_1.jpg",
           file: image1,
+          contentType: 'image/jpeg',
+          timeout: const Duration(seconds: 45),
         ),
-        StorageService.uploadFile(
-          storagePath: "complaints/${cid}_2",
+        StorageService.uploadFileOrInline(
+          storagePath: "lostandfound/${cid}_2.jpg",
           file: image2,
+          contentType: 'image/jpeg',
+          timeout: const Duration(seconds: 45),
         ),
       ]);
 
       final imageUpdates = <String, dynamic>{};
       if (results[0] != null) imageUpdates['Image1'] = results[0];
       if (results[1] != null) imageUpdates['Image2'] = results[1];
-      if (imageUpdates.isEmpty) return;
+      if (imageUpdates.isEmpty) {
+        print('Lost & Found: no image URLs saved for CID=$cid');
+        return;
+      }
 
       await databaseRef
           .child("/Complaints/All/$cid")
           .update(imageUpdates)
           .timeout(FirebaseService.rtdbTimeout);
+      print(
+        'Lost & Found images saved for CID=$cid '
+        '(Image1=${results[0] != null}, Image2=${results[1] != null})',
+      );
     } catch (e) {
-      print('Complaint image upload failed: $e');
+      print('Lost & Found image upload failed: $e');
     }
   }
 }

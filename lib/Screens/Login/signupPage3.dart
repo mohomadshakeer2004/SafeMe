@@ -409,16 +409,20 @@ class _SignupScreen3State extends State<SignupScreen3> {
       print(
           "**************Save User Data Step-1 response = ${response.toString()}");
 
-      /// Save User step -2 Profile Image (optional — requires Blaze plan)
-      final imageUrl = await StorageService.uploadFile(
-        storagePath: 'public profile images/$nicKey',
+      /// Save User step -2 Profile Image (Storage, or inline fallback for Spark plan)
+      final imageUrl = await StorageService.uploadFileOrInline(
+        storagePath: 'public-profile/$nicKey.jpg',
         file: File(ProfileImage),
+        contentType: 'image/jpeg',
+        timeout: const Duration(seconds: 45),
       );
       if (imageUrl != null) {
         print("********Image URL = $imageUrl");
         await databaseRef
             .child("/PublicUsers/All/$nicKey")
             .update({'ProfileImage': imageUrl});
+      } else {
+        print('Profile image upload skipped/failed for $nicKey');
       }
 
       ///Update User Count

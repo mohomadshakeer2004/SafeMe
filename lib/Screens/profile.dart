@@ -747,9 +747,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     var imageUploadSkipped = false;
 
     if (newImagePath != null && newImagePath.isNotEmpty) {
-      final imageUrl = await StorageService.uploadFile(
-        storagePath: 'public profile images/$NIC',
+      final imageUrl = await StorageService.uploadFileOrInline(
+        storagePath: 'public-profile/$NIC.jpg',
         file: File(newImagePath),
+        contentType: 'image/jpeg',
+        timeout: const Duration(seconds: 45),
       );
       if (imageUrl != null) {
         data['ProfileImage'] = imageUrl;

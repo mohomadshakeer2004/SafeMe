@@ -627,7 +627,7 @@ class _ComplaintFormState extends State<ComplaintForm> {
 
       await firebase.syncLegacyComplaintCounters(cid);
 
-      _uploadComplaintImages(firebase, nicKey, cid, Image1, Image2);
+      await _uploadComplaintImages(firebase, nicKey, cid, Image1, Image2);
 
       return true;
     } catch (e, st) {
@@ -646,13 +646,15 @@ class _ComplaintFormState extends State<ComplaintForm> {
   ) async {
     try {
       final results = await Future.wait([
-        StorageService.uploadFile(
-          storagePath: "complaints/${cid}_1",
+        StorageService.uploadFileOrInline(
+          storagePath: "complaints/${cid}_1.jpg",
           file: image1,
+          contentType: 'image/jpeg',
         ),
-        StorageService.uploadFile(
-          storagePath: "complaints/${cid}_2",
+        StorageService.uploadFileOrInline(
+          storagePath: "complaints/${cid}_2.jpg",
           file: image2,
+          contentType: 'image/jpeg',
         ),
       ]);
 
