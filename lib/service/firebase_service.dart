@@ -327,6 +327,52 @@ class FirebaseService {
     print('saveSafeMeAlert: REST OK $path');
   }
 
+  /// Push live GPS during an active shake emergency (admin map follows this).
+  Future<void> updateSafeMeLiveLocation({
+    required int sid,
+    required double latitude,
+    required double longitude,
+  }) async {
+    await ensureAuthenticatedForWrite();
+    final path = 'SafeMe/All/$sid';
+    final updates = <String, dynamic>{
+      'Latitude': latitude,
+      'Longitude': longitude,
+      'LiveLocation': true,
+      'LocationUpdatedAt': DateTime.now().toIso8601String(),
+      // Forces admin UI to refresh even if coords barely change.
+      'LiveTick': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    try {
+      await rootRef.child(path).update(updates).timeout(const Duration(seconds: 15));
+      return;
+    } catch (e) {
+      print('updateSafeMeLiveLocation SDK failed ($e), REST…');
+    }
+
+    await RtdbRestService.instance.patch(path, updates);
+  }
+
+  /// Attach recorded shake / SafeMe voice URL to an existing alert.
+  Future<void> updateSafeMeAudio({
+    required int sid,
+    required String audioUrl,
+  }) async {
+    await ensureAuthenticatedForWrite();
+    final path = 'SafeMe/All/$sid';
+    final updates = <String, dynamic>{'AudioMP3': audioUrl};
+
+    try {
+      await rootRef.child(path).update(updates).timeout(const Duration(seconds: 15));
+      return;
+    } catch (e) {
+      print('updateSafeMeAudio SDK failed ($e), REST…');
+    }
+
+    await RtdbRestService.instance.patch(path, updates);
+  }
+
   /// Updates [SafeMe/LastSID], [PendingCount], and [TotalCount] (SDK first).
   Future<void> syncSafeMeCounters(int newSid) async {
     await ensureAuthenticatedForWrite();
@@ -513,6 +559,24 @@ class FirebaseService {
         .child('Complaints/All/$cid')
         .remove()
         .timeout(rtdbTimeout);
+  }
+
+  /// Citizen cannot remove a complaint until police set Status = Delete Approved.
+  Future<void> requestComplaintDeletion(String cid) async {
+    await ensureAuthenticatedForWrite();
+    await rootRef.child('Complaints/All/$cid').update({
+      'Status': 'Delete Requested',
+      'DeleteRequestedDate': DateTime.now().toIso8601String(),
+    }).timeout(rtdbTimeout);
+  }
+
+  /// Citizen cannot remove a SafeMe alert until police set Status = Delete Approved.
+  Future<void> requestSafeMeDeletion(String sid) async {
+    await ensureAuthenticatedForWrite();
+    await rootRef.child('SafeMe/All/$sid').update({
+      'Status': 'Delete Requested',
+      'DeleteRequestedDate': DateTime.now().toIso8601String(),
+    }).timeout(rtdbTimeout);
   }
 
   static String _nicFromEntry(Map<String, dynamic> entry) {

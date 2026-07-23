@@ -43,7 +43,10 @@ class _HomeBaseState extends State<HomeBase> {
   void initState() {
     super.initState();
     getUser();
-    _syncShakeListener();
+    // Start after first frame so HomeScreen has bound onTripleShake.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncShakeListener();
+    });
   }
 
   @override

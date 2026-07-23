@@ -11,15 +11,18 @@ class HomeShakeService {
 
   static final HomeShakeService instance = HomeShakeService._();
 
-  static const double _shakeThresholdGravity = 2.7;
-  static const int _shakeSlopMs = 500;
-  static const int _shakeCountResetMs = 3000;
+  /// Detectable shake on a phone held in hand / pocket.
+  static const double _shakeThresholdGravity = 2.1;
+  static const int _shakeSlopMs = 350;
+  static const int _shakeCountResetMs = 3500;
   static const int _shakesRequired = 3;
+  static const int _cooldownMs = 4000;
 
   StreamSubscription<AccelerometerEvent>? _subscription;
   int _listenGeneration = 0;
   int _shakeTimestamp = 0;
   int _shakeCount = 0;
+  int _lastTriggerMs = 0;
 
   VoidCallback? onTripleShake;
 
@@ -32,10 +35,15 @@ class HomeShakeService {
     _shakeCount = 0;
     _shakeTimestamp = DateTime.now().millisecondsSinceEpoch;
 
-    _subscription = accelerometerEventStream().listen((event) {
+    _subscription = accelerometerEventStream(
+      samplingPeriod: SensorInterval.uiInterval,
+    ).listen((event) {
       if (generation != _listenGeneration) return;
       _handleAccelerometer(event);
+    }, onError: (Object e) {
+      debugPrint('Shake accelerometer error: $e');
     });
+    debugPrint('HomeShakeService: listening');
   }
 
   /// Stops accelerometer only — keeps [onTripleShake] so home tab can resume listening.
@@ -67,16 +75,31 @@ class HomeShakeService {
 
     _shakeTimestamp = now;
     _shakeCount++;
-    debugPrint('********$_shakeCount');
+    debugPrint('********$_shakeCount (g=$gForce)');
 
     if (_shakeCount < _shakesRequired) return;
 
     _shakeCount = 0;
+    if (now - _lastTriggerMs < _cooldownMs) {
+      debugPrint('Shake trigger cooldown — skip');
+      return;
+    }
+    _lastTriggerMs = now;
     _triggerEmergency();
   }
 
   void _triggerEmergency() {
-    EmergencyAudioService.instance.playAlarm();
-    onTripleShake?.call();
+    debugPrint('HomeShakeService: TRIPLE SHAKE — firing');
+    unawaited(
+      EmergencyAudioService.instance.playAlarm(
+        duration: const Duration(seconds: 5),
+      ),
+    );
+    final handler = onTripleShake;
+    if (handler == null) {
+      debugPrint('HomeShakeService: onTripleShake is NULL — rebind home handler');
+      return;
+    }
+    handler();
   }
 }

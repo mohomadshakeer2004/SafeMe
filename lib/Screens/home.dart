@@ -18,7 +18,10 @@ import '../Screens/PoliceMap/policeMap.dart';
 import '../Resources/colors.dart';
 import '../widgets/drawer.dart';
 import 'Appoinment/appointment_base.dart';
+import 'package:safe_me/service/emergency_audio_service.dart';
 import 'package:safe_me/service/home_shake_service.dart';
+import 'package:safe_me/service/safeme_live_location_service.dart';
+import 'package:safe_me/service/shake_voice_capture_service.dart';
 import 'SafeMe/safeMeBase.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -45,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _locationReady = false;
   List<NearestPoliceStation> _nearestStations = [];
+  bool _shakeBusy = false;
 
   getUserData() async {
     final nic = await UserService().requireLoggedInNic();
@@ -110,6 +114,8 @@ class _HomeScreenState extends State<HomeScreen> {
     getUserData();
     getCurrLocation();
     _bindShakeHandler();
+    // Warm mic permission so shake can record immediately.
+    unawaited(ShakeVoiceCaptureService.instance.ensureReady());
   }
 
   void _bindShakeHandler() {
@@ -117,35 +123,136 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onTripleShake() {
-    if (!mounted) return;
+    // Always attempt send — do not require mounted (IndexedStack / overlays).
+    if (_shakeBusy) {
+      debugPrint('Shake ignored: already sending');
+      return;
+    }
     unawaited(_runShakeSafeMe());
   }
 
+  Future<Position> _resolveShakePosition() async {
+    // Prefer a quick fix; never hang the emergency send.
+    try {
+      final fresh = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 4),
+        ),
+      );
+      return fresh;
+    } catch (e) {
+      debugPrint('Shake GPS timeout/fail: $e');
+    }
+
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null) return last;
+    } catch (e) {
+      debugPrint('Shake last-known GPS failed: $e');
+    }
+
+    return _position;
+  }
+
   Future<void> _runShakeSafeMe() async {
+    if (_shakeBusy) return;
+    _shakeBusy = true;
+
     print(
-        '*************************ShakeDetector Start*****************************');
-
-    final sessionOk = await UserService().checkSession();
-    if (!sessionOk) {
-      EasyLoading.showError('Please log in again');
-      return;
-    }
-
-    if (userData.isEmpty) {
-      await getUserData();
-    }
-
-    await submitSafeMe(
-      UserDataUtil.field(userData, 'Address'),
-      DateTime.now(),
-      UserDataUtil.field(userData, 'Email'),
-      _position.latitude,
-      _position.longitude,
-      UserDataUtil.mobileAsInt(userData),
-      UserDataUtil.field(userData, 'NIC'),
-      UserDataUtil.field(userData, 'Name'),
-      UserDataUtil.field(userData, 'ProfileImage'),
+      '*************************ShakeDetector Start*****************************',
     );
+
+    // Hard watchdog so a hung network/GPS call cannot block future shakes.
+    final busyWatchdog = Timer(const Duration(seconds: 60), () {
+      debugPrint('Shake busy watchdog fired — resetting');
+      _shakeBusy = false;
+    });
+
+    try {
+      EasyLoading.show(status: 'Sending emergency…');
+
+      final sessionOk = await UserService()
+          .checkSession()
+          .timeout(const Duration(seconds: 8), onTimeout: () => false);
+      if (!sessionOk) {
+        EasyLoading.showError('Please log in again');
+        return;
+      }
+
+      if (userData.isEmpty) {
+        try {
+          await getUserData().timeout(const Duration(seconds: 8));
+        } catch (e) {
+          debugPrint('Shake userData load failed: $e');
+        }
+      }
+
+      final pos = await _resolveShakePosition();
+      if (mounted) {
+        setState(() {
+          _position = pos;
+          _locationReady =
+              pos.latitude != 0 || pos.longitude != 0;
+        });
+      } else {
+        _position = pos;
+        _locationReady = pos.latitude != 0 || pos.longitude != 0;
+      }
+
+      final sid = await submitSafeMe(
+        UserDataUtil.field(userData, 'Address'),
+        DateTime.now(),
+        UserDataUtil.field(userData, 'Email'),
+        pos.latitude,
+        pos.longitude,
+        UserDataUtil.mobileAsInt(userData),
+        UserDataUtil.field(userData, 'NIC'),
+        UserDataUtil.field(userData, 'Name'),
+        UserDataUtil.field(userData, 'ProfileImage'),
+      ).timeout(
+        const Duration(seconds: 40),
+        onTimeout: () {
+          debugPrint('shake submitSafeMe timed out');
+          return null;
+        },
+      );
+
+      if (sid == null) {
+        EasyLoading.showError('Emergency send failed — try again');
+        return;
+      }
+
+      // Live GPS for admin (non-blocking).
+      unawaited(SafeMeLiveLocationService.instance.start(sid));
+
+      // Voice capture after send — let alarm ring ~5s first, then mute for mic.
+      unawaited(() async {
+        try {
+          await Future<void>.delayed(const Duration(seconds: 5));
+          await EmergencyAudioService.instance.stopForMicCapture(
+            settle: const Duration(milliseconds: 800),
+          );
+          final audio = await ShakeVoiceCaptureService.instance.recordFor(
+            duration: const Duration(seconds: 12),
+          );
+          if (audio != null) {
+            await ShakeVoiceCaptureService.instance.uploadForAlert(
+              sid: sid,
+              audioFile: audio,
+            );
+          }
+        } catch (e) {
+          debugPrint('Shake voice finalize failed: $e');
+        }
+      }());
+    } catch (e, st) {
+      debugPrint('Shake emergency failed: $e\n$st');
+      EasyLoading.showError('Emergency send failed');
+    } finally {
+      busyWatchdog.cancel();
+      _shakeBusy = false;
+    }
   }
 
   @override
@@ -156,7 +263,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    HomeShakeService.instance.clearHandler();
+    // Keep handler if HomeBase still owns the tab stack; HomeBase clears on exit.
+    // Only clear if we are the current handler (avoid wiping a rebound handler).
+    if (identical(HomeShakeService.instance.onTripleShake, _onTripleShake)) {
+      HomeShakeService.instance.clearHandler();
+    }
     super.dispose();
   }
 
@@ -167,9 +278,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openPoliceMap() {
-    final hasLocation = _locationReady &&
-        _position.latitude != 0 &&
-        _position.longitude != 0;
+    final hasLocation =
+        _locationReady && _position.latitude != 0 && _position.longitude != 0;
 
     Navigator.push(
       context,
@@ -188,9 +298,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: appSurface,
-      drawer: Drawer(
-        child: DrawerWidget(),
-      ),
+      drawer: Drawer(child: DrawerWidget()),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -230,7 +338,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         border: Border(
-          bottom: BorderSide(color: appAccent.withValues(alpha: 0.85), width: 3),
+          bottom: BorderSide(
+            color: appAccent.withValues(alpha: 0.85),
+            width: 3,
+          ),
         ),
         boxShadow: [
           BoxShadow(
@@ -260,31 +371,37 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       onPressed: () => Scaffold.of(context).openDrawer(),
-                      tooltip:
-                          MaterialLocalizations.of(context).openAppDrawerTooltip,
+                      tooltip: MaterialLocalizations.of(
+                        context,
+                      ).openAppDrawerTooltip,
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.all(2),
+                    height: 46,
+                    width: 46,
+                    padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: Colors.white.withValues(alpha: 0.9),
                       ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        height: 38,
-                        width: 38,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(
-                          Icons.shield_outlined,
-                          color: Colors.white.withValues(alpha: 0.95),
-                          size: 34,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
                         ),
+                      ],
+                    ),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                      errorBuilder: (_, __, ___) => Icon(
+                        Icons.shield_rounded,
+                        color: secondary,
+                        size: 28,
                       ),
                     ),
                   ),
@@ -322,8 +439,10 @@ class _HomeScreenState extends State<HomeScreen> {
               if (_userName.isNotEmpty) ...[
                 const SizedBox(height: 14),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
@@ -401,8 +520,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 18,
+                ),
                 child: Row(
                   children: [
                     Container(
@@ -469,9 +590,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildLocationCard() {
-    final hasLocation = _locationReady &&
-        _position.latitude != 0 &&
-        _position.longitude != 0;
+    final hasLocation =
+        _locationReady && _position.latitude != 0 && _position.longitude != 0;
 
     return Material(
       color: Colors.transparent,
@@ -485,8 +605,10 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 color: secondary.withValues(alpha: 0.04),
                 child: Row(
                   children: [
@@ -515,9 +637,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 : 'Locating'.tr(),
                             style: TextStyle(
                               fontSize: 11,
-                              color: hasLocation
-                                  ? appTextMuted
-                                  : appTextSubtle,
+                              color: hasLocation ? appTextMuted : appTextSubtle,
                               fontFamily: 'Poppins-Light',
                             ),
                           ),
@@ -575,8 +695,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         final station = _nearestStations[index];
                         return Padding(
                           padding: EdgeInsets.only(
-                            bottom:
-                                index == _nearestStations.length - 1 ? 0 : 8,
+                            bottom: index == _nearestStations.length - 1
+                                ? 0
+                                : 8,
                           ),
                           child: _HomeUi.stationRow(
                             rank: index + 1,
@@ -693,7 +814,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<bool> submitSafeMe(
+  Future<int?> submitSafeMe(
     String Address,
     DateTime Date,
     String Email,
@@ -725,23 +846,29 @@ class _HomeScreenState extends State<HomeScreen> {
         'Image5': '',
         'Latitude': Latitude,
         'Longitude': Longitude,
+        'LiveLocation': true,
+        'LocationUpdatedAt': DateTime.now().toIso8601String(),
+        'LiveTick': DateTime.now().millisecondsSinceEpoch,
         'Mobile': Mobile,
         'NIC': UserDataUtil.normalizeNic(NIC),
         'Name': Name,
         'ProfileImage': ProfileImage,
-        'Severity': 'Medium',
+        'Severity': 'High',
         'Status': 'Alert Sent',
+        'Source': 'Shake Emergency',
       };
 
       await firebase.saveSafeMeAlert(sid: sid, data: data);
       await firebase.syncSafeMeCounters(sid);
 
-      EasyLoading.showSuccess('SafeMe alert sent!');
-      return true;
+      EasyLoading.showSuccess(
+        'Emergency sent — voice + live location sharing…',
+      );
+      return sid;
     } catch (e) {
       print('shake submitSafeMe failed: $e');
       EasyLoading.showError('SafeMe alert failed');
-      return false;
+      return null;
     } finally {
       EasyLoading.dismiss();
     }
@@ -768,9 +895,10 @@ class _RingingPhoneIconState extends State<_RingingPhoneIcon>
       vsync: this,
       duration: const Duration(milliseconds: 700),
     )..repeat(reverse: true);
-    _shake = Tween<double>(begin: -0.12, end: 0.12).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _shake = Tween<double>(
+      begin: -0.12,
+      end: 0.12,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -784,10 +912,7 @@ class _RingingPhoneIconState extends State<_RingingPhoneIcon>
     return AnimatedBuilder(
       animation: _shake,
       builder: (context, child) {
-        return Transform.rotate(
-          angle: _shake.value,
-          child: child,
-        );
+        return Transform.rotate(angle: _shake.value, child: child);
       },
       child: const Icon(
         Icons.ring_volume_rounded,
@@ -816,10 +941,7 @@ class _HomeUi {
     );
   }
 
-  static Widget iconBadge({
-    required IconData icon,
-    required Color color,
-  }) {
+  static Widget iconBadge({required IconData icon, required Color color}) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -949,8 +1071,10 @@ class _ServiceTile extends StatelessWidget {
                   ),
                 ),
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 18,
+                    horizontal: 12,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [

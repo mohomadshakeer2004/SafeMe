@@ -80,14 +80,25 @@ class _ComplaintHomeState extends State<ComplaintHome> {
 
   Future<void> _confirmAndDeleteComplaint(int index, {bool confirm = true}) async {
     if (index < 0 || index >= myComplaints.length) return;
-    final cid = '${myComplaints[index]['CID']}';
+    final item = myComplaints[index];
+    final cid = '${item['CID']}';
+    final status = '${item['Status'] ?? ''}'.trim().toLowerCase();
+
+    if (status != 'delete approved') {
+      EasyLoading.showInfo(
+        'Police must approve delete first. Use Request Delete.',
+      );
+      return;
+    }
 
     if (confirm) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Delete complaint?'),
-          content: Text('Remove complaint CID-$cid?'),
+          content: Text(
+            'Police approved removal of complaint CID-$cid. Delete now?',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -120,6 +131,67 @@ class _ComplaintHomeState extends State<ComplaintHome> {
         setState(() => myComplaints.insert(index, removed));
       }
       EasyLoading.showError('Delete failed');
+    } finally {
+      EasyLoading.dismiss();
+    }
+  }
+
+  bool _canRequestComplaintDelete(Map<String, dynamic> item) {
+    final status = '${item['Status'] ?? ''}'.trim().toLowerCase();
+    return status != 'delete requested' && status != 'delete approved';
+  }
+
+  bool _canDeleteComplaint(Map<String, dynamic> item) {
+    return '${item['Status'] ?? ''}'.trim().toLowerCase() == 'delete approved';
+  }
+
+  Future<void> _confirmRequestComplaintDelete(int index) async {
+    if (index < 0 || index >= myComplaints.length) return;
+    final item = myComplaints[index];
+    final cid = '${item['CID']}';
+
+    if (!_canRequestComplaintDelete(item)) {
+      EasyLoading.showInfo('Delete already requested or approved');
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Request delete?'),
+        content: Text(
+          'Complaint CID-$cid cannot be deleted until police approve. '
+          'Send a delete request?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Request Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    EasyLoading.show(status: 'Submitting...');
+    try {
+      await FirebaseService.instance.requestComplaintDeletion(cid);
+      if (!mounted) return;
+      setState(() {
+        myComplaints[index] = {
+          ...item,
+          'Status': 'Delete Requested',
+          'DeleteRequestedDate': DateTime.now().toIso8601String(),
+        };
+      });
+      EasyLoading.showSuccess('Delete request sent to police');
+    } catch (e) {
+      debugPrint('Complaint delete request failed: $e');
+      EasyLoading.showError('Request failed');
     } finally {
       EasyLoading.dismiss();
     }
@@ -218,28 +290,47 @@ class _ComplaintHomeState extends State<ComplaintHome> {
                                       Slidable(
                                         key: ValueKey(
                                             'complaint_${myComplaints[i]['CID']}'),
-                                        endActionPane: ActionPane(
-                                          motion: BehindMotion(),
-                                          dismissible: DismissiblePane(
-                                            onDismissed: () =>
-                                                _confirmAndDeleteComplaint(
-                                              i,
-                                              confirm: false,
-                                            ),
-                                          ),
-                                          children: [
-                                            SlidableAction(
-                                              onPressed: (ctx) =>
-                                                  _confirmAndDeleteComplaint(i),
-                                              backgroundColor:
-                                                  Color(0xff0c213a),
-                                              foregroundColor: Colors.white,
-                                              icon: Icons.delete_outline,
-                                              label: 'Delete',
-                                              autoClose: true,
-                                            ),
-                                          ],
-                                        ),
+                                        endActionPane: _canDeleteComplaint(
+                                                myComplaints[i])
+                                            ? ActionPane(
+                                                motion: BehindMotion(),
+                                                children: [
+                                                  SlidableAction(
+                                                    onPressed: (ctx) =>
+                                                        _confirmAndDeleteComplaint(
+                                                            i),
+                                                    backgroundColor:
+                                                        Color(0xff0c213a),
+                                                    foregroundColor:
+                                                        Colors.white,
+                                                    icon: Icons.delete_outline,
+                                                    label: 'Delete',
+                                                    autoClose: true,
+                                                  ),
+                                                ],
+                                              )
+                                            : _canRequestComplaintDelete(
+                                                    myComplaints[i])
+                                                ? ActionPane(
+                                                    motion: BehindMotion(),
+                                                    extentRatio: 0.38,
+                                                    children: [
+                                                      SlidableAction(
+                                                        onPressed: (ctx) =>
+                                                            _confirmRequestComplaintDelete(
+                                                                i),
+                                                        backgroundColor:
+                                                            emergencyPrimary,
+                                                        foregroundColor:
+                                                            Colors.white,
+                                                        icon: Icons
+                                                            .hourglass_top_outlined,
+                                                        label: 'Request Delete',
+                                                        autoClose: true,
+                                                      ),
+                                                    ],
+                                                  )
+                                                : null,
                                         child: InkWell(
                                           onTap: () {
                                             print("Select Conplaint");

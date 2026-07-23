@@ -134,9 +134,9 @@ class _AppointmentBaseState extends State<AppointmentBase> {
         title: Text(
           'Cancel_Appointment_Title'.tr(),
           style: TextStyle(
-            color: secondary,
+              color: secondary,
             fontFamily: 'Poppins-Bold',
-            fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.bold,
           ),
         ),
         content: Text(
@@ -190,16 +190,16 @@ class _AppointmentBaseState extends State<AppointmentBase> {
   Widget _idStrip(String label) {
     return Container(
       width: 44,
-      decoration: BoxDecoration(
+                  decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
             secondary,
             Color.lerp(secondary, appAccent, 0.3)!,
-          ],
-        ),
-      ),
+                      ],
+                    ),
+                  ),
       child: Center(
         child: RotatedBox(
           quarterTurns: 3,
@@ -244,13 +244,13 @@ class _AppointmentBaseState extends State<AppointmentBase> {
       ),
       child: Text(
         status,
-        style: TextStyle(
+                                                                                style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
           color: fg,
-          fontFamily: 'Poppins-Bold',
-        ),
-      ),
+                                                                                  fontFamily: 'Poppins-Bold',
+                                                                                ),
+                                                                              ),
     );
   }
 
@@ -264,27 +264,27 @@ class _AppointmentBaseState extends State<AppointmentBase> {
       child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+                                                                            children: [
             _idStrip('AID-${_publicAppointmentId(item)}'),
             Expanded(
               child: Container(
                 color: appSurface,
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
+                                                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                children: [
+                                                                          Row(
+                                                                            children: [
                         Expanded(
                           child: Text(
                             '${item['Type'] ?? ''}',
-                            style: TextStyle(
+                                                                                style: TextStyle(
                               fontSize: 14,
-                              fontWeight: FontWeight.bold,
+                                                                                  fontWeight: FontWeight.bold,
                               color: secondary,
-                              fontFamily: 'Poppins-Bold',
-                            ),
-                          ),
+                                                                                  fontFamily: 'Poppins-Bold',
+                                                                                ),
+                                                                              ),
                         ),
                         _statusChip(status),
                       ],
@@ -313,20 +313,20 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                           'Cancel_Fine_Notice'.tr(namedArgs: {
                             'amount': '${fine is num ? fine.toStringAsFixed(0) : fine}',
                           }),
-                          style: TextStyle(
+                                                                                style: TextStyle(
                             fontSize: 12,
                             color: emergencyPrimary,
-                            fontFamily: 'Poppins-Light',
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+                                                                                  fontFamily: 'Poppins-Light',
+                                                                                ),
+                                                                              ),
+                                                                          ),
+                                                                        ],
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                              ],
+                                                            ),
+                                                          ),
     );
 
     if (!_canRequestCancel(item)) {
@@ -340,20 +340,20 @@ class _AppointmentBaseState extends State<AppointmentBase> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Slidable(
         key: ValueKey('public_appt_${_publicAppointmentId(item)}'),
-        endActionPane: ActionPane(
+                                                      endActionPane: ActionPane(
           motion: const BehindMotion(),
           extentRatio: 0.32,
-          children: [
-            SlidableAction(
+                                                        children: [
+                                                          SlidableAction(
               onPressed: (_) => _confirmCancelRequest(index),
               backgroundColor: emergencyPrimary,
               foregroundColor: Colors.white,
               icon: Icons.event_busy_outlined,
               label: 'Request_Cancel'.tr(),
-              autoClose: true,
-            ),
-          ],
-        ),
+                                                            autoClose: true,
+                                                          ),
+                                                        ],
+                                                      ),
         child: card,
       ),
     );
@@ -362,33 +362,33 @@ class _AppointmentBaseState extends State<AppointmentBase> {
   Widget _buildPoliceCard(Map<String, dynamic> item) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Container(
+                                                        child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: ComplaintUi.cardDecoration(),
         child: IntrinsicHeight(
-          child: Row(
+                                                          child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+                                                            children: [
               _idStrip('AID-${_policeAppointmentId(item)}'),
-              Expanded(
-                child: Container(
+                                                              Expanded(
+                                                                child: Container(
                   color: appSurface,
                   padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                  child: Column(
+                                                                      child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
+                                                                        children: [
+                                                                          Row(
+                                                                            children: [
                           Expanded(
-                            child: Text(
+                                                                              child: Text(
                               '${item['Type'] ?? ''}',
-                              style: TextStyle(
+                                                                                style: TextStyle(
                                 fontSize: 14,
-                                fontWeight: FontWeight.bold,
+                                                                                fontWeight: FontWeight.bold,
                                 color: secondary,
-                                fontFamily: 'Poppins-Bold',
-                              ),
-                            ),
+                                                                                fontFamily: 'Poppins-Bold',
+                                                                              ),
+                                                                            ),
                           ),
                           _statusChip('Police_Assigned'.tr()),
                         ],
@@ -407,13 +407,13 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                         '${item['City'] ?? '-'}',
                       ),
                     ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+                                                                ),
+                                                              ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
     );
   }
 
@@ -467,8 +467,8 @@ class _AppointmentBaseState extends State<AppointmentBase> {
           Expanded(
             child: DefaultTabController(
               length: 2,
-              child: Column(
-                children: [
+                                      child: Column(
+                                        children: [
                   TabBar(
                     indicatorColor: appAccent,
                     labelColor: secondary,
@@ -516,11 +516,11 @@ class _AppointmentBaseState extends State<AppointmentBase> {
                               )
                             : ComplaintUi.emptyState(
                                 message: 'No_Police_Appointment'.tr(),
-                              ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
               ),
             ),
           ),
