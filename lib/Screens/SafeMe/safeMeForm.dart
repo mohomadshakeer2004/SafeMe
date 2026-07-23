@@ -329,7 +329,9 @@ class _SafeMeFormState extends State<SafeMeForm> {
                   SizedBox(height: 15),
                   FormBuilderDropdown(
                     onChanged: (val) => setState(() {
-                      selectDistrict = val.toString();
+                      selectDistrict = val?.toString() ?? '';
+                      selectCity = '';
+                      _fbKey.currentState?.fields['city']?.didChange(null);
                     }),
                     name: 'district',
                     decoration: InputDecoration(
@@ -340,18 +342,20 @@ class _SafeMeFormState extends State<SafeMeForm> {
                       focusedBorder: OutlineInputBorder(
                           borderSide: BorderSide(color: secondary)),
                     ),
-                    // initialValue: allGroups[0],
                     validator: (value) =>
-                        value == null ? "Enter Your District" : null,
-
+                        value == null || value.toString().isEmpty
+                            ? "Enter Your District"
+                            : null,
                     items: SriLankaLocations.dropdownItems(
                       SriLankaLocations.districts,
                     ),
                   ),
                   SizedBox(height: 15),
                   FormBuilderDropdown(
+                    key: ValueKey('city_$selectDistrict'),
+                    enabled: selectDistrict.isNotEmpty,
                     onChanged: (val) => setState(() {
-                      selectCity = val.toString();
+                      selectCity = val?.toString() ?? '';
                     }),
                     name: 'city',
                     decoration: InputDecoration(
@@ -363,11 +367,11 @@ class _SafeMeFormState extends State<SafeMeForm> {
                           borderSide: BorderSide(color: secondary)),
                     ),
                     validator: (value) =>
-                        value == null ? "Enter Your City" : null,
-                    // initialValue: allGroups[0],
-
+                        value == null || value.toString().isEmpty
+                            ? "Enter Your City"
+                            : null,
                     items: SriLankaLocations.dropdownItems(
-                      SriLankaLocations.cities,
+                      SriLankaLocations.citiesForDistrict(selectDistrict),
                     ),
                   ),
                   SizedBox(height: 25),

@@ -30,10 +30,10 @@ class AppointmentForm extends StatefulWidget {
 class _AppointmentFormState extends State<AppointmentForm> {
   final GlobalKey<FormBuilderState> _fbKey = GlobalKey<FormBuilderState>();
 
-  late String selectDistrict;
-  late String selectCity;
-  late String selectType;
-  late DateTime selectDate;
+  String selectDistrict = '';
+  String selectCity = '';
+  String selectType = '';
+  DateTime selectDate = DateTime.now();
   bool isAgree = false;
 
   final _txtDescriptionController = TextEditingController();
@@ -108,27 +108,35 @@ class _AppointmentFormState extends State<AppointmentForm> {
                 children: [
                   FormBuilderDropdown(
                     onChanged: (val) => setState(() {
-                      selectDistrict = val.toString();
+                      selectDistrict = val?.toString() ?? '';
+                      selectCity = '';
+                      _fbKey.currentState?.fields['city']?.didChange(null);
                     }),
                     name: 'district',
                     decoration: ComplaintUi.fieldDecoration('district'.tr()),
                     validator: (value) =>
-                        value == null ? 'Enter Your District' : null,
+                        value == null || value.toString().isEmpty
+                            ? 'Enter Your District'
+                            : null,
                     items: SriLankaLocations.dropdownItems(
                       SriLankaLocations.districts,
                     ),
                   ),
                   const SizedBox(height: 14),
                   FormBuilderDropdown(
+                    key: ValueKey('city_$selectDistrict'),
+                    enabled: selectDistrict.isNotEmpty,
                     onChanged: (val) => setState(() {
-                      selectCity = val.toString();
+                      selectCity = val?.toString() ?? '';
                     }),
                     name: 'city',
                     decoration: ComplaintUi.fieldDecoration('City'.tr()),
                     validator: (value) =>
-                        value == null ? 'Enter Your City' : null,
+                        value == null || value.toString().isEmpty
+                            ? 'Enter Your City'
+                            : null,
                     items: SriLankaLocations.dropdownItems(
-                      SriLankaLocations.cities,
+                      SriLankaLocations.citiesForDistrict(selectDistrict),
                     ),
                   ),
                   const SizedBox(height: 14),
