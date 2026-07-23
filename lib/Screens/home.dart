@@ -749,6 +749,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildServicesGrid(double sysWidth) {
     final tileWidth = (sysWidth - 32 - 12) / 2;
 
+    // Colors matched to each service meaning.
+    const complaintColor = Color(0xFF334155); // document / records grey-blue
+    const safeMeColor = Color(0xFFB91C1C); // safety / emergency red
+    const appointmentColor = Color(0xFF1D4ED8); // calendar / schedule blue
+    const mapColor = Color(0xFF1E3A8A); // police blue
+    const lostFoundColor = Color(0xFFB45309); // find / search amber
+    const contactColor = Color(0xFF15803D); // phone / call green
+
     return Wrap(
       spacing: 12,
       runSpacing: 12,
@@ -757,7 +765,7 @@ class _HomeScreenState extends State<HomeScreen> {
           width: tileWidth,
           label: 'Complaint'.tr(),
           iconPath: 'assets/icons/complaint.png',
-          accentColor: secondary,
+          accentColor: complaintColor,
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const ComplaintHome()),
@@ -767,7 +775,7 @@ class _HomeScreenState extends State<HomeScreen> {
           width: tileWidth,
           label: 'Safe_Me'.tr(),
           iconPath: 'assets/icons/safe.png',
-          accentColor: emergencyPrimary,
+          accentColor: safeMeColor,
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const SafeMeBase()),
@@ -777,7 +785,7 @@ class _HomeScreenState extends State<HomeScreen> {
           width: tileWidth,
           label: 'Appointment'.tr(),
           iconPath: 'assets/icons/appointment.png',
-          accentColor: secondary,
+          accentColor: appointmentColor,
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const AppointmentBase()),
@@ -787,14 +795,14 @@ class _HomeScreenState extends State<HomeScreen> {
           width: tileWidth,
           label: 'Police_Map'.tr(),
           iconPath: 'assets/icons/nearest.png',
-          accentColor: appAccent,
+          accentColor: mapColor,
           onTap: _openPoliceMap,
         ),
         _ServiceTile(
           width: tileWidth,
           label: 'Lost_Found'.tr(),
           iconPath: 'assets/icons/lost_found.png',
-          accentColor: secondary,
+          accentColor: lostFoundColor,
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const LostFoundItem()),
@@ -804,7 +812,7 @@ class _HomeScreenState extends State<HomeScreen> {
           width: tileWidth,
           label: 'Contact'.tr(),
           iconPath: 'assets/icons/contact.png',
-          accentColor: secondary,
+          accentColor: contactColor,
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const EmergencyContact()),
@@ -1038,6 +1046,9 @@ class _ServiceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final softBg = Color.lerp(const Color(0xFFF8FAFC), accentColor, 0.06)!;
+    final iconBg = Color.lerp(Colors.white, accentColor, 0.1)!;
+
     return SizedBox(
       width: width,
       child: Material(
@@ -1047,12 +1058,12 @@ class _ServiceTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(_HomeUi.radius),
           child: Ink(
             decoration: BoxDecoration(
-              color: appSurfaceElevated,
+              color: softBg,
               borderRadius: BorderRadius.circular(_HomeUi.radius),
               border: Border.all(color: appBorder),
               boxShadow: [
                 BoxShadow(
-                  color: secondary.withValues(alpha: 0.05),
+                  color: secondary.withValues(alpha: 0.06),
                   blurRadius: 10,
                   offset: const Offset(0, 3),
                 ),
@@ -1081,10 +1092,10 @@ class _ServiceTile extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(13),
                         decoration: BoxDecoration(
-                          color: accentColor.withValues(alpha: 0.09),
+                          color: iconBg,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: accentColor.withValues(alpha: 0.14),
+                            color: accentColor.withValues(alpha: 0.18),
                           ),
                         ),
                         child: Image.asset(
