@@ -2,11 +2,14 @@
 class UserDataUtil {
   /// Old format: 9 digits + V/X. New format: 12 digits (e.g. 200405411177).
   static bool isValidNic(String value) {
-    final nic = value.trim().toUpperCase();
+    final nic = normalizeNic(value);
     return RegExp(r'^(?:[0-9]{9}[VX]|[0-9]{12})$').hasMatch(nic);
   }
 
-  static String normalizeNic(String value) => value.trim().toUpperCase();
+  /// Trim, uppercase, strip spaces/dashes so typing variants still match.
+  static String normalizeNic(String value) {
+    return value.trim().toUpperCase().replaceAll(RegExp(r'[\s\-]'), '');
+  }
 
   static String field(
     Map<String, dynamic> data,

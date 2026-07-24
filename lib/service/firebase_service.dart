@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:safe_me/firebase_options.dart';
 import 'package:safe_me/service/rtdb_rest_service.dart';
+import 'package:safe_me/util/user_data_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Shared Firebase Realtime Database + auth helpers for [safe-a67e3].
@@ -81,6 +82,62 @@ class FirebaseService {
   Future<DataSnapshot> getPublicUser(String nic) {
     final nicKey = nic.trim().toUpperCase();
     return rootRef.child('PublicUsers/All/$nicKey').get();
+  }
+
+  /// True only when a real user account already exists for this NIC.
+  /// Returns false for new / unknown IDs (never treat network issues as "taken").
+  Future<bool> isNicRegistered(String nic) async {
+    final nicKey = UserDataUtil.normalizeNic(nic);
+    if (nicKey.isEmpty) return false;
+
+    try {
+      if (FirebaseAuth.instance.currentUser == null) {
+        await signInAsAdmin();
+      }
+    } catch (e) {
+      print('isNicRegistered: admin sign-in failed ($e), trying read anyway');
+    }
+
+    // 1) SDK read
+    try {
+      final snapshot = await rootRef
+          .child('PublicUsers/All/$nicKey')
+          .get()
+          .timeout(const Duration(seconds: 12));
+      final taken = _snapshotLooksLikeRegisteredUser(snapshot.value);
+      print('isNicRegistered SDK $nicKey → $taken');
+      return taken;
+    } catch (e) {
+      print('isNicRegistered SDK failed ($e), REST…');
+    }
+
+    // 2) REST fallback
+    try {
+      final raw = await RtdbRestService.instance
+          .get('PublicUsers/All/$nicKey')
+          .timeout(const Duration(seconds: 12));
+      final taken = _snapshotLooksLikeRegisteredUser(raw);
+      print('isNicRegistered REST $nicKey → $taken');
+      return taken;
+    } catch (e) {
+      print('isNicRegistered REST failed ($e)');
+      // Unknown — not "taken". Caller may allow signup; final save re-checks.
+      return false;
+    }
+  }
+
+  static bool _snapshotLooksLikeRegisteredUser(dynamic value) {
+    if (value == null) return false;
+    if (value is! Map) return false;
+    final map = Map<String, dynamic>.from(
+      value.map((k, v) => MapEntry(k.toString(), v)),
+    );
+    // Empty map / placeholder is not a registered user.
+    if (map.isEmpty) return false;
+    final password = '${map['Password'] ?? ''}'.trim();
+    final name = '${map['Name'] ?? ''}'.trim();
+    final nic = '${map['NIC'] ?? ''}'.trim();
+    return password.isNotEmpty || name.isNotEmpty || nic.isNotEmpty;
   }
 
   /// Signs in with the shared admin account (not the user's RTDB password).

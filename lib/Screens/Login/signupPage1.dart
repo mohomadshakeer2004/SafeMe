@@ -13,6 +13,7 @@ import 'package:motion_toast/motion_toast.dart';
 import '../../Controller/language_controller.dart';
 import '../../Resources/colors.dart';
 import '../../Resources/style.dart';
+import '../../service/firebase_service.dart';
 import '../../util/user_data_util.dart';
 import 'LoginPage.dart';
 import 'signupPage2.dart';
@@ -32,6 +33,10 @@ class _SignupScreenState extends State<SignupScreen1> {
 
   XFile? _imageFile = null;
   final ImagePicker _picker = ImagePicker();
+
+  /// Shown under the NIC field when that ID is already registered.
+  String? _nicTakenError;
+  bool _checkingNic = false;
 
   getCircleAvatarWidget(ImageProvider<Object> imageProvider) {
     return CircleAvatar(
@@ -206,24 +211,96 @@ class _SignupScreenState extends State<SignupScreen1> {
                             keyboardType: TextInputType.text,
                             autofocus: false,
                             controller: _txtNicController,
-                            validator: (value) =>
-                                value == null || value.trim().isEmpty
-                                    ? 'Enter Your NIC No'
-                                    : UserDataUtil.isValidNic(value)
-                                        ? null
-                                        : 'Enter a Valid NIC No',
+                            onChanged: (_) {
+                              // Clear any previous "taken" message while typing a new ID.
+                              if (_nicTakenError != null || _checkingNic) {
+                                setState(() {
+                                  _nicTakenError = null;
+                                  _checkingNic = false;
+                                });
+                              }
+                            },
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Enter Your NIC No';
+                              }
+                              if (!UserDataUtil.isValidNic(value)) {
+                                return 'Enter a Valid NIC No';
+                              }
+                              // Only after an explicit check marked this NIC as taken.
+                              if (_nicTakenError != null) {
+                                return _nicTakenError;
+                              }
+                              return null;
+                            },
                             decoration: InputDecoration(
                               labelText: "NIC".tr(),
                               labelStyle: hintTextStyle,
                               contentPadding:
                                   EdgeInsets.fromLTRB(20, 10, 20, 10),
-                              border: OutlineInputBorder(
-                                  // borderRadius: BorderRadius.circular(10)
-                                  ),
+                              errorMaxLines: 3,
+                              border: OutlineInputBorder(),
                               focusedBorder: OutlineInputBorder(
                                   borderSide: BorderSide(color: secondary)),
+                              errorBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: emergencyPrimary),
+                              ),
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: emergencyPrimary,
+                                  width: 1.5,
+                                ),
+                              ),
+                              suffixIcon: _checkingNic
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    )
+                                  : _nicTakenError != null
+                                      ? Icon(Icons.error_outline,
+                                          color: emergencyPrimary)
+                                      : null,
                             ),
                           ),
+                          if (_nicTakenError != null) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: emergencyPrimary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color:
+                                      emergencyPrimary.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.info_outline,
+                                      color: emergencyPrimary, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _nicTakenError!,
+                                      style: TextStyle(
+                                        color: emergencyPrimary,
+                                        fontSize: 13,
+                                        fontFamily: 'Poppins-Light',
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 30),
                           FormBuilderTextField(
                             name: "email",
@@ -279,34 +356,81 @@ class _SignupScreenState extends State<SignupScreen1> {
                           const SizedBox(height: 30),
                           InkWell(
                             onTap: () async {
-                              if (_fbKey.currentState!.validate()) {
-                                if (_imageFile != null) {
-                                  print("******Validate******");
-                                  print(_fbKey.currentState!.value);
-                                  Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => SignupScreen2(
-                                            _txtFNameController.text,
-                                            _txtLNameController.text,
-                                            UserDataUtil.normalizeNic(
-                                                _txtNicController.text),
-                                            _txtMobNoController.text,
-                                            _txtEmailController.text,
-                                            _imageFile!.path.toString()),
-                                      ));
-                                } else {
-                                  MotionToast.error(
-                                    title: Text("Error"),
-                                    description: Text(
-                                        "Please Select your Profile Image"),
-                                    animationType: AnimationType.slideInFromLeft,
-                                    toastAlignment: Alignment.topCenter,
-                                  ).show(context);
-                                }
-                              } else {
+                              if (!_fbKey.currentState!.validate()) {
                                 print("******Not Validate******");
+                                return;
                               }
+                              if (_imageFile == null) {
+                                MotionToast.error(
+                                  title: Text("Error"),
+                                  description: Text(
+                                      "Please Select your Profile Image"),
+                                  animationType: AnimationType.slideInFromLeft,
+                                  toastAlignment: Alignment.topCenter,
+                                ).show(context);
+                                return;
+                              }
+
+                              final nic = UserDataUtil.normalizeNic(
+                                  _txtNicController.text);
+                              final status = await _checkNicAvailability();
+                              if (!mounted) return;
+
+                              // ONLY block when Firebase confirms this NIC exists.
+                              if (status == _NicCheckStatus.taken) {
+                                await showDialog<void>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('ID already in use'),
+                                    content: Text(
+                                      'This NIC / ID ($nic) is already registered.\n\n'
+                                      'Please sign in with that account, or use a different NIC.',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx),
+                                        child: const Text('OK'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.pop(ctx);
+                                          Navigator.pushReplacement(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => LoginPage(),
+                                            ),
+                                          );
+                                        },
+                                        child: Text(
+                                          'Login'.tr(),
+                                          style: TextStyle(color: secondary),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                return;
+                              }
+
+                              // New ID, or check could not run — allow continue.
+                              // Final signup page re-checks before saving.
+                              if (status == _NicCheckStatus.invalid) {
+                                return;
+                              }
+
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => SignupScreen2(
+                                    _txtFNameController.text,
+                                    _txtLNameController.text,
+                                    nic,
+                                    _txtMobNoController.text,
+                                    _txtEmailController.text,
+                                    _imageFile!.path.toString(),
+                                  ),
+                                ),
+                              );
                             },
                             child: Container(
                               height: 50,
@@ -356,6 +480,52 @@ class _SignupScreenState extends State<SignupScreen1> {
             )),
       ),
     );
+  }
+
+  /// Checks Firebase. [taken] ONLY when a user record exists for this NIC.
+  Future<_NicCheckStatus> _checkNicAvailability() async {
+    final raw = _txtNicController.text;
+    if (!UserDataUtil.isValidNic(raw)) {
+      setState(() => _nicTakenError = null);
+      return _NicCheckStatus.invalid;
+    }
+
+    final nic = UserDataUtil.normalizeNic(raw);
+    setState(() {
+      _checkingNic = true;
+      _nicTakenError = null;
+    });
+
+    try {
+      final taken = await FirebaseService.instance.isNicRegistered(nic);
+      if (!mounted) return _NicCheckStatus.error;
+
+      if (taken == true) {
+        setState(() {
+          _checkingNic = false;
+          _nicTakenError =
+              'This ID ($nic) is already registered. Please login or use another NIC.';
+        });
+        _fbKey.currentState?.fields['nic']?.validate();
+        return _NicCheckStatus.taken;
+      }
+
+      // New / free ID — clear any error and continue.
+      setState(() {
+        _checkingNic = false;
+        _nicTakenError = null;
+      });
+      return _NicCheckStatus.available;
+    } catch (e) {
+      debugPrint('NIC check failed: $e');
+      if (!mounted) return _NicCheckStatus.error;
+      // Do not show "already in use" on failure — treat as available for now.
+      setState(() {
+        _checkingNic = false;
+        _nicTakenError = null;
+      });
+      return _NicCheckStatus.available;
+    }
   }
 
   Widget bottomSheet(BuildContext sheetContext) {
@@ -421,3 +591,5 @@ class _SignupScreenState extends State<SignupScreen1> {
     });
   }
 }
+
+enum _NicCheckStatus { available, taken, invalid, error }
